@@ -20,16 +20,18 @@ credentials, database, images, PVCs, or NodePort.
 
 ## Initial setup
 
-1. Push `main` and wait for the `release` workflow. Ensure both GHCR packages are
-   public after their first publication (GitHub initially creates private packages).
+1. Push `main` and wait for the `release` workflow. Verify both GHCR packages are
+   publicly pullable. If GitHub creates one as private, make it public once.
 2. Run `scripts/bootstrap-deploy.sh` from the checkout. It automatically reads the
    local ignored `.env`, creates only the Unter namespace and Secret, then applies
    Unter's Flux source and reconciliation resource. Secret values travel only over
    SSH stdin and are never put in shell arguments or tracked files.
 3. Wait for Unter workloads to become ready. Validate through the private endpoint
    from the Caddy container before changing public routes.
-4. Back up the existing Caddyfile, append `deploy/Caddyfile` if the hostname is
-   absent, validate inside `windogs-proxy`, and reload. Check Unter and Cube Studio.
+4. Run `uv run --project services/python python scripts/configure-caddy.py`. It
+   checks the private gateway, backs up the existing Caddyfile, appends only Unter,
+   validates inside `windogs-proxy`, and reloads, restoring the original on failure.
+   Check Unter and Cube Studio afterward.
 
 Existing cluster-admin access is through `/home/andy/.kube/cube-studio.yaml` on the
 server. Its filename identifies the original bootstrap, not shared application
