@@ -1,0 +1,105 @@
+name: unter
+x-python: &python
+  image: ${UNTER_PYTHON_IMAGE:-unter-python:dev}
+  restart: unless-stopped
+  init: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+x-auth: &auth
+  SERVICE_USERNAME: ${SERVICE_USERNAME:?Run scripts/init-env.py first}
+  SERVICE_PASSWORD: ${SERVICE_PASSWORD:?Run scripts/init-env.py first}
+x-db: &db
+  DB_HOST: postgres
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: unter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      CORE_DB_PASSWORD: ${CORE_DB_PASSWORD:?}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:?}
+      ACTIVITY_DB_PASSWORD: ${ACTIVITY_DB_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U unter -d postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4.1.4-alpine
+    hostname: unter-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: unter
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+  core:
+    image: ${UNTER_CORE_IMAGE:-unter-core:dev}
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: [*auth, *db]
+      DB_PASSWORD: ${CORE_DB_PASSWORD:?}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+  worker:
+    <<: *python
+    environment:
+      <<: [*auth, *db]
+      SERVICE_MODULE: worker
+      DB_NAME: activity
+      DB_USER: activity
+      DB_PASSWORD: ${ACTIVITY_DB_PASSWORD:?}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+  mcp:
+    <<: *python
+    environment:
+      <<: *auth
+      SERVICE_MODULE: mcp_server
+    depends_on: [core]
+  agent:
+    <<: *python
+    environment:
+      <<: [*auth, *db]
+      SERVICE_MODULE: agent
+      DB_NAME: agent
+      DB_USER: agent
+      DB_PASSWORD: ${AGENT_DB_PASSWORD:?}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      AGENT_MODE: ${AGENT_MODE:-live}
+      MAX_DAILY_RUNS: ${MAX_DAILY_RUNS:-30}
+      AGNO_TELEMETRY: 'false'
+    depends_on:
+      postgres: {condition: service_healthy}
+      mcp: {condition: service_started}
+  gateway:
+    <<: *python
+    build:
+      context: .
+      dockerfile: services/python/Dockerfile
+    environment:
+      <<: *auth
+      SERVICE_MODULE: gateway
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+    ports: ['127.0.0.1:5180:8000']
+    depends_on: [core, worker, mcp, agent]
+volumes:
+  postgres-data:
+  rabbitmq-data:

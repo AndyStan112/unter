@@ -1,0 +1,4 @@
+unter.windogs.win {
+    encode zstd gzip
+    reverse_proxy 172.22.0.1:30574
+}

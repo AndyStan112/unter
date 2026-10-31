@@ -1,0 +1,16 @@
+[project]
+name = "unter-services"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "agno>=2.0,<3", "openai>=2,<3", "fastmcp>=2.12,<3",
+  "fastapi>=0.115,<1", "uvicorn>=0.35,<1", "httpx>=0.28,<1",
+  "psycopg[binary]>=3.2,<4", "aio-pika>=9.5,<10", "croniter>=6,<7",
+  "python-dotenv>=1,<2",
+]
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init
+data:
+  init.sh: "#!/bin/sh\nset -eu\n# Values arrive through the container environment;\
+    \ psql variables quote literals safely.\npsql -v ON_ERROR_STOP=1 --username \"\
+    $POSTGRES_USER\" --dbname postgres \\\n  -v core_password=\"$CORE_DB_PASSWORD\"\
+    \ -v agent_password=\"$AGENT_DB_PASSWORD\" \\\n  -v activity_password=\"$ACTIVITY_DB_PASSWORD\"\
+    \ <<'SQL'\nCREATE USER core PASSWORD :'core_password';\nCREATE USER agent PASSWORD\
+    \ :'agent_password';\nCREATE USER activity PASSWORD :'activity_password';\nCREATE\
+    \ DATABASE core OWNER core;\nCREATE DATABASE agent OWNER agent;\nCREATE DATABASE\
+    \ activity OWNER activity;\nREVOKE CONNECT ON DATABASE core FROM PUBLIC;\nREVOKE\
+    \ CONNECT ON DATABASE agent FROM PUBLIC;\nREVOKE CONNECT ON DATABASE activity\
+    \ FROM PUBLIC;\nGRANT CONNECT ON DATABASE core TO core;\nGRANT CONNECT ON DATABASE\
+    \ agent TO agent;\nGRANT CONNECT ON DATABASE activity TO activity;\nSQL\n"
