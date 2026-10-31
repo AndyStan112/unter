@@ -9,7 +9,7 @@ installable admin PWA. No ride-hailing platform is implemented.
 Prerequisites: Docker Compose and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-cp .env.example .env # only if .env does not already exist
+test -f .env || cp .env.example .env
 # Set OPENAI_API_KEY in your editor. Never commit .env.
 UV_CACHE_DIR=/tmp/unter-uv-cache uv sync --project services/python --frozen
 UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/init-env.py
@@ -61,7 +61,7 @@ Edit Java sources and run `docker compose up -d --build core` to rebuild that se
   demonstration status; it has no real-world effects.
 
 Every trigger shares a 30-second cooldown, one-running-at-a-time lock, 100-second
-run timeout, one tool-call limit, 1,200 output-token cap per model call, and a default
+run timeout, one tool-call limit, a hard two-model-request limit, 1,200 output-token cap per model call, and a default
 30-runs-per-UTC-day limit (failed attempts count too). A normal hello run makes two
 model requests, around the single MCP call. No free-form paid prompt endpoint is
 exposed. Limits bound usage; they are not a provider-side dollar budget.

@@ -10,7 +10,7 @@ from croniter import croniter
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from .model import HelloModel
 from agno.tools.mcp import MCPTools
 from agno.utils.log import agent_logger
 
@@ -78,7 +78,7 @@ async def hello():
                 item.text for item in rows.content if hasattr(item, 'text')), ['list_observations']
         agent = Agent(
             name='Unter hello world',
-            model=OpenAIChat(id=MODEL, max_completion_tokens=1200,
+            model=HelloModel(id=MODEL, max_completion_tokens=1200,
                              reasoning_effort="minimal", timeout=40, max_retries=0, retries=0, store=False),
             tools=[tools], tool_call_limit=1,
             tool_choice={'type': 'function', 'function': {'name': 'list_observations'}},
