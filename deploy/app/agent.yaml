@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent
+spec:
+  selector:
+    app: agent
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app: agent
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: unter
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: agent
+        image: unter-python
+        ports:
+        - containerPort: 8000
+        env:
+        - name: SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SERVICE_USERNAME
+        - name: SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SERVICE_PASSWORD
+        - name: DB_HOST
+          value: postgres
+        - name: DB_NAME
+          value: agent
+        - name: DB_USER
+          value: agent
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: AGENT_DB_PASSWORD
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: OPENAI_API_KEY
+        - name: OPENAI_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: OPENAI_MODEL
+        - name: AGENT_MODE
+          value: live
+        - name: MAX_DAILY_RUNS
+          value: '30'
+        - name: AGNO_TELEMETRY
+          value: 'false'
+        - name: SERVICE_MODULE
+          value: agent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 768Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 20
+          failureThreshold: 6
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+          failureThreshold: 60

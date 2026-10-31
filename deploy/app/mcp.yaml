@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp
+spec:
+  selector:
+    app: mcp
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app: mcp
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: unter
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: mcp
+        image: unter-python
+        ports:
+        - containerPort: 8000
+        env:
+        - name: SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SERVICE_USERNAME
+        - name: SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SERVICE_PASSWORD
+        - name: SERVICE_MODULE
+          value: mcp_server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 20
+          failureThreshold: 6
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+          failureThreshold: 60

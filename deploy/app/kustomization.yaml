@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: unter
+resources:
+- agent.yaml
+- core.yaml
+- db-init.yaml
+- gateway.yaml
+- mcp.yaml
+- namespace.yaml
+- network-policy.yaml
+- postgres.yaml
+- rabbitmq.yaml
+- worker.yaml
+images:
+- name: unter-core
+  newName: ghcr.io/andystan112/unter-core
+  newTag: cc0fc688dc0859c42145110edcb434d664b0b7c9
+- name: unter-python
+  newName: ghcr.io/andystan112/unter-python
+  newTag: cc0fc688dc0859c42145110edcb434d664b0b7c9
