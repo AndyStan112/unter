@@ -1,4 +1,4 @@
-.PHONY: init up dev test integration deploy
+.PHONY: init up dev test integration migrations-check deploy
 init:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv sync --project services/python --frozen
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/init-env.py
@@ -13,5 +13,7 @@ test:
 	node --check web/sw.js
 integration:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/integration.py
+migrations-check:
+	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/check-migrations.py
 deploy:
 	bash scripts/bootstrap-deploy.sh

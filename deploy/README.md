@@ -63,3 +63,16 @@ that snapshot. Database migrations require their own rollback plan.
 Do not delete the namespace or PVCs to roll back application code. Stateful data
 lives on this single server and is not highly available. For this seeded skeleton,
 no backup CronJob is installed; add database backups before storing valuable data.
+
+## Schema migrations
+
+The core service uses Flyway. Agent and worker run their own Alembic migration
+chains before starting. Their first tracked revisions validate and adopt the
+original unversioned tables, preserving existing rows and schedule settings.
+No manual stamp or database recreation is required. A mismatch prevents startup
+and rolls back schema/version changes. Each Python database has its own
+`alembic_version`; core retains `flyway_schema_history`.
+
+See [database migrations](../docs/database-migrations.md) for operational commands
+and compatibility/rollback details. CI tests fresh installs and legacy adoption
+before publishing images. Secrets and database ownership stay unchanged.

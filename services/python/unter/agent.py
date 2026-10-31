@@ -18,6 +18,7 @@ from agno.utils.log import agent_logger
 agent_logger.disabled = True
 from .auth import BasicAuth, basic_header
 from .common import connect
+from .migrate import upgrade_database
 
 UTC = timezone.utc
 MODEL = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
@@ -52,15 +53,9 @@ def next_time(cron, zone, now=None):
 
 
 def initialize():
+    upgrade_database('agent')
     with connect() as db:
-        db.execute('''CREATE TABLE IF NOT EXISTS schedule (
-          id integer PRIMARY KEY CHECK (id=1), cron text NOT NULL,
-          timezone text NOT NULL, enabled boolean NOT NULL, next_at timestamptz NOT NULL)''')
-        db.execute('''CREATE TABLE IF NOT EXISTS runs (
-          id uuid PRIMARY KEY, source text NOT NULL, status text NOT NULL,
-          mode text NOT NULL, model text NOT NULL, started_at timestamptz NOT NULL DEFAULT now(),
-          finished_at timestamptz, result text, error text, tool_calls jsonb)''')
-        db.execute("INSERT INTO schedule VALUES (1,'0 * * * *','Europe/Bucharest',false,%s) ON CONFLICT DO NOTHING",
+        db.execute("INSERT INTO schedule (id, cron, timezone, enabled, next_at) VALUES (1,'0 * * * *','Europe/Bucharest',false,%s) ON CONFLICT DO NOTHING",
                    (next_time('0 * * * *', 'Europe/Bucharest'),))
         # A killed process cannot complete its in-flight run; do not retry paid calls.
         db.execute("UPDATE runs SET status='interrupted', finished_at=now(), error='Run interrupted; not retried' WHERE status='running' AND started_at < now() - interval '3 minutes'")

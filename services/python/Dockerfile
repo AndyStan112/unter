@@ -4,6 +4,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY services/python/pyproject.toml services/python/uv.lock ./
 RUN uv sync --frozen --no-dev
+COPY services/python/alembic.ini ./alembic.ini
 COPY services/python/unter ./unter
 COPY web ./web
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 AGNO_TELEMETRY=false

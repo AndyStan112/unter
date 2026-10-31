@@ -6,6 +6,7 @@ import aio_pika
 from fastapi import FastAPI
 from .auth import BasicAuth
 from .common import connect
+from .migrate import upgrade_database
 
 ready = False
 
@@ -40,8 +41,7 @@ async def consume():
 
 @asynccontextmanager
 async def lifespan(app):
-    with connect() as db:
-        db.execute('CREATE TABLE IF NOT EXISTS activity (id text PRIMARY KEY, kind text NOT NULL, payload jsonb NOT NULL, created_at timestamptz DEFAULT now())')
+    upgrade_database('activity')
     task = asyncio.create_task(consume())
     yield
     task.cancel()

@@ -6,7 +6,7 @@ dependencies = [
   "agno>=2.0,<3", "openai>=2,<3", "fastmcp>=2.12,<3",
   "fastapi>=0.115,<1", "uvicorn>=0.35,<1", "httpx>=0.28,<1",
   "psycopg[binary]>=3.2,<4", "aio-pika>=9.5,<10", "croniter>=6,<7",
-  "python-dotenv>=1,<2",
+  "python-dotenv>=1,<2", "alembic>=1.16,<2", "sqlalchemy>=2.0,<3",
 ]
 [dependency-groups]
 dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]

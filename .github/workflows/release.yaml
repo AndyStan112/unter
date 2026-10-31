@@ -26,6 +26,7 @@ jobs:
       - name: Full stack integration (no paid model calls)
         run: |
           AGENT_MODE=fake docker compose up -d --build
+          uv run --project services/python python scripts/check-migrations.py
           uv run --project services/python python scripts/integration.py
           uv run --project services/python python scripts/schedule-check.py
       - if: failure()

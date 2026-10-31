@@ -104,3 +104,13 @@ See [deploy/README.md](deploy/README.md). Successful pushes to `main` run checks
 build SHA-tagged GHCR images, publish a full manifest snapshot on the generated
 `deployments` branch, and let Flux reconcile. Never merge that generated branch
 back into `main`. CI does not receive the OpenAI key or production credentials.
+
+## Database migration history
+
+All three databases have versioned schema tracking: Flyway for `core`, and separate
+Alembic histories for `agent` and `activity`. Services automatically apply pending
+migrations on startup, including fresh local installations. The initial Python
+revisions safely adopt compatible existing tables without losing their records.
+
+See [database migrations](docs/database-migrations.md) for current-version commands,
+adding migrations, using another local database, migration tests and dump/restore.
