@@ -24,7 +24,7 @@ async def main():
                         pages=(await http.get('http://localhost:9337/json')).json()
                         break
                     except httpx.HTTPError: await asyncio.sleep(.3)
-            async with connect(pages[0]['webSocketDebuggerUrl'],max_size=10_000_000) as ws:
+            async with connect(next(page for page in pages if page['type']=='page')['webSocketDebuggerUrl'],max_size=10_000_000) as ws:
                 seq=0
                 async def command(method,params=None):
                     nonlocal seq
@@ -48,17 +48,19 @@ async def main():
                 for _ in range(40):
                     if await evaluate("document.querySelector('#zone-count')?.textContent === '3'"):break
                     await asyncio.sleep(.5)
-                else:raise AssertionError('Dashboard did not load seeded data')
+                else:
+                    print('Browser diagnostic:', await evaluate("({url:location.href,title:document.title,notice:document.querySelector('#notice')?.textContent,body:document.body?.innerText.slice(0,500)})"))
+                    raise AssertionError('Dashboard did not load seeded data')
                 assert await evaluate("document.querySelector('#connection').textContent === 'Connected'")
                 Path('.local').mkdir(exist_ok=True)
                 shot=await command('Page.captureScreenshot',{'format':'png','captureBeyondViewport':True})
                 Path('.local/dashboard-desktop.png').write_bytes(base64.b64decode(shot['data']))
                 await evaluate("document.querySelector('[data-view=agent]').click()")
                 assert await evaluate("!document.querySelector('#agent').hidden")
-                await evaluate("document.querySelector('#cron').value='30 */3 * * *'; document.querySelector('#schedule-form').requestSubmit()")
+                await evaluate("document.querySelector('#cron').value='30 */3 * * *'; document.querySelector('#schedule-form').requestSubmit(document.querySelector('#schedule-form button'))")
                 await asyncio.sleep(1)
                 assert await evaluate("document.querySelector('#notice').textContent === 'Schedule saved.'")
-                await evaluate("document.querySelector('#cron').value='0 * * * *'; document.querySelector('#schedule-form').requestSubmit()")
+                await evaluate("document.querySelector('#cron').value='0 * * * *'; document.querySelector('#schedule-form').requestSubmit(document.querySelector('#schedule-form button'))")
                 await asyncio.sleep(1)
                 await command('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True})
                 await evaluate("document.querySelector('[data-view=overview]').click()")

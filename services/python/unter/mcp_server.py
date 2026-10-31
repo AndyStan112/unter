@@ -15,7 +15,7 @@ async def list_observations() -> list[dict]:
 @mcp.tool()
 async def list_pending_proposals() -> list[dict]:
     """List pending demonstration proposals; the hello-world agent does not create these."""
-    return await core('GET', '/proposals')
+    return [row for row in await core('GET', '/proposals') if row['status'] == 'pending']
 
 
 @mcp.tool()

@@ -2,8 +2,8 @@
 x-reload: &reload
   command: [sh, -c, 'exec uvicorn unter.$${SERVICE_MODULE}:app --host 0.0.0.0 --port 8000 --reload --no-access-log']
   volumes:
-    - ./services/python/unter:/app/unter:ro
-    - ./web:/app/web:ro
+    - ./services/python/unter:/app/unter:ro,z
+    - ./web:/app/web:ro,z
 services:
   agent: *reload
   worker: *reload
