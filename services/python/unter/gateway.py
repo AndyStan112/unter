@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 import httpx
 from fastapi import FastAPI, Request
@@ -18,35 +19,39 @@ def health():
 api = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 api.add_middleware(BasicAuth, kind='ADMIN', csrf=True)
 
+# Worker and agent routes are listed one by one. Every other /api path belongs to core, which
+# authenticates and validates each request itself.
 ROUTES = {
-    'observations': ('CORE_URL', 'http://core:8080', '/observations', {'GET'}),
-    'proposals': ('CORE_URL', 'http://core:8080', '/proposals', {'GET', 'POST', 'PATCH'}),
     'activity': ('WORKER_URL', 'http://worker:8000', '/activity', {'GET'}),
     'schedule': ('AGENT_URL', 'http://agent:8000', '/schedule', {'GET', 'PUT'}),
     'runs': ('AGENT_URL', 'http://agent:8000', '/runs', {'GET'}),
     'run': ('AGENT_URL', 'http://agent:8000', '/run', {'POST'}),
     'openapi': ('CORE_URL', 'http://core:8080', '/v3/api-docs', {'GET'}),
 }
+SEGMENT = re.compile(r'[A-Za-z0-9_-]+')
 
 
-@api.api_route('/{name}', methods=['GET', 'POST', 'PUT'])
-@api.api_route('/{name}/{item}', methods=['PATCH'])
-async def forward(name: str, request: Request, item: str | None = None):
-    if name not in ROUTES or request.method not in ROUTES[name][3] or (item and name != 'proposals'):
+@api.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH'])
+async def forward(path: str, request: Request):
+    segments = path.split('/')
+    # Plain names and ids only: no '..', empty or encoded segments reach a backend.
+    if not all(SEGMENT.fullmatch(segment) for segment in segments):
         return JSONResponse({'detail': 'Not found'}, 404)
-    env, default, path, _ = ROUTES[name]
-    if item:
-        import uuid
-        try:
-            path += '/' + str(uuid.UUID(item))
-        except ValueError:
-            return JSONResponse({'detail': 'Invalid identifier'}, 400)
+    if segments[0] in ROUTES:
+        env, default, target, methods = ROUTES[segments[0]]
+        if len(segments) > 1 or request.method not in methods:
+            return JSONResponse({'detail': 'Not found'}, 404)
+        base = os.getenv(env, default)
+    else:
+        base, target = os.getenv('CORE_URL', 'http://core:8080'), '/' + path
+    query = request.url.query
+    url = base + target + ('?' + query if query else '')
     payload = await request.body()
     if len(payload) > 16384:
         return JSONResponse({'detail': 'Request too large'}, 413)
     try:
         async with httpx.AsyncClient(timeout=115) as client:
-            response = await client.request(request.method, os.getenv(env, default) + path,
+            response = await client.request(request.method, url,
                 content=payload, headers={'Authorization': basic_header(), 'Content-Type': 'application/json'})
         # Backend responses are controlled JSON; never forward service auth challenges.
         return Response(response.content, status_code=response.status_code, media_type='application/json')
