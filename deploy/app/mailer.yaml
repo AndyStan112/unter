@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailer
+spec:
+  selector:
+    app: mailer
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailer
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: &id001
+      app: mailer
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: unter
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: mailer
+        image: unter-python
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_HOST
+          value: postgres
+        - name: DB_NAME
+          value: agent
+        - name: DB_USER
+          value: agent
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: AGENT_DB_PASSWORD
+        - name: RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: RABBITMQ_PASSWORD
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SMTP_HOST
+              optional: true
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SMTP_PORT
+              optional: true
+        - name: SMTP_SECURITY
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SMTP_SECURITY
+              optional: true
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SMTP_USER
+              optional: true
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: SMTP_PASSWORD
+              optional: true
+        - name: MAIL_FROM
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: MAIL_FROM
+              optional: true
+        - name: SERVICE_MODULE
+          value: mailer
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 20
+          failureThreshold: 6
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+          failureThreshold: 60

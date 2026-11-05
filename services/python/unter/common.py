@@ -18,3 +18,15 @@ async def core(method, path, **kwargs):
                                         headers={'Authorization': basic_header()}, **kwargs)
         response.raise_for_status()
         return response.json()
+
+
+async def core_read(path, params=None):
+    """GET from core with the READER login, which core refuses for anything but GET/HEAD.
+
+    The MCP server's only way to reach core: it holds no login that can write.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(os.getenv('CORE_URL', 'http://core:8080') + path, params=params,
+                                    headers={'Authorization': basic_header('READER')})
+        response.raise_for_status()
+        return response.json()

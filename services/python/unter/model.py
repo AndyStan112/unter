@@ -1,18 +1,18 @@
-"""An explicit provider-call budget around Agno's tool loop."""
+"""An explicit provider-call budget around Agno's model."""
 from dataclasses import dataclass, field
 from agno.models.openai import OpenAIChat
 
+# One request explains a report; the second is headroom. Nothing the model says can raise this.
+MAX_MODEL_REQUESTS = 2
+
 
 @dataclass
-class HelloModel(OpenAIChat):
+class CappedModel(OpenAIChat):
+    max_requests: int = MAX_MODEL_REQUESTS
     _requests: int = field(default=0, init=False)
 
     async def ainvoke(self, *args, **kwargs):
-        if self._requests >= 2:
-            raise RuntimeError('Hello-world model request limit reached')
+        if self._requests >= self.max_requests:
+            raise RuntimeError('Model request limit reached')
         self._requests += 1
-        if self._requests == 2:
-            # Agno retains a forced tool_choice across turns. Explicitly stop tools
-            # after the first read so the second request can produce final text.
-            kwargs['tool_choice'] = 'none'
         return await super().ainvoke(*args, **kwargs)

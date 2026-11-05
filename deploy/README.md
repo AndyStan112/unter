@@ -6,11 +6,16 @@ credentials, database, images, PVCs, or NodePort.
 
 - Namespace: `unter`, with resource quota, private service accounts, and default-deny
   network policies. Only explicit intra-application paths, DNS, agent HTTPS egress,
-  and Caddy ingress are allowed. The worker/core databases are not reachable from
-  Cube Studio pods. The agent's public HTTPS egress permits external APIs, not just
-  OpenAI; it does not grant private-network access.
+  mailer SMTP egress (public addresses, ports 465/587) and Caddy ingress are allowed. The
+  worker/core databases are not reachable from Cube Studio pods. The agent's public HTTPS
+  egress permits external APIs, not just OpenAI; it does not grant private-network access.
+- Only the gateway and the MCP server reach `core`. The MCP server holds only the GET-only
+  `READER` login; the agent, mailer and worker have no route to `core`.
+- Quota: the pods' CPU limits add up to 7.25 of the 8 allowed. A new pod needs a quota or
+  limit change; `services/python/tests/test_deploy_manifests.py` fails otherwise.
 - Persistent volumes: 4 GiB PostgreSQL, 2 GiB RabbitMQ, using existing local-path storage.
-- Database accounts: separate passwords and databases for core, agent and activity.
+- Database accounts: separate passwords and databases for core, agent and activity. The
+  mailer uses the agent's account to record email delivery in the agent database.
 - Flux resources: `unter` in `flux-system`, reading this public repository's
   `deployments` branch without a deploy key.
 - Images: `ghcr.io/andystan112/unter-core` and `unter-python`, pinned to source SHA.
@@ -53,6 +58,34 @@ or unrestricted pod environment dumps in public logs: they can resolve secrets.
 Edit manifests directly, or regenerate them with
 `uv run --project services/python python scripts/generate-manifests.py`. Review the
 result before committing. The generator has no secret inputs.
+
+## Upgrading to the surge & incentive report release
+
+This release adds the read-only `READER` login, the `/stats` endpoints (Flyway `V7`, an index),
+the report pipeline, its agent tables (`agent_0002`–`agent_0004`) and the `mailer` deployment.
+Order matters, because pods won't start while a Secret key they need is missing:
+
+1. **Before merging to `main`:** add `READER_USERNAME`/`READER_PASSWORD` to the local `.env`
+   (`scripts/init-env.py` fills missing values) and, if reports should be emailed,
+   `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`.
+   Then run `scripts/sync-secrets.py`. The SMTP keys are optional: without `SMTP_HOST` the
+   mailer records reports as `not_configured` and sends nothing.
+2. **Release:** merge to `main`. Flux applies the new manifests. On start, core runs `V7`
+   and the agent runs `agent_0002`–`agent_0004`; all are additive. The mailer may log
+   requeues until the agent has migrated; that resolves itself.
+3. **Verify** (from the server, through the gateway with the admin login):
+   - `GET /api/schedule` shows `window_hours` and `recipients`.
+   - The MCP tools list is `list_zones`, `zone_demand`, `zone_flows`, `offer_stats`,
+     `driver_supply`, `active_rules`, `zone_snapshot`.
+   - After a run, `GET /api/reports` lists the report with `published: true` and a
+     `delivery` status (`sent`, `not_configured` or `skipped`).
+   - In RabbitMQ, the queues `unter.reports` and `unter.reports.retry` exist.
+4. **Settings:** set the window and recipients under **Schedule & runs**, then enable the
+   schedule. It stays disabled until someone does.
+
+**Rolling back** to the previous image is safe for the database: the new agent tables and the
+core index are additive, and older code ignores them. The `mailer` deployment and its queues
+stay until the manifests are rolled back too. Emails already sent can't be recalled.
 
 ## Rollback and persistence
 
