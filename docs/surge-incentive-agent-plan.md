@@ -3,7 +3,7 @@
 Status: **implemented (steps 1–9, 2026-11-05)**; unit tests and the Compose dev stack checks
 (migrations, integration, read-only, stats, browser) pass, plus a live gpt-5-nano report and an
 approval that created and approved the incentive in core. Not yet run on the cluster. Open questions
-remain in section 10. Plan date: 2026-11-03.
+remain in section 10, and known gaps in section 11. Plan date: 2026-11-03.
 
 Fixed during the stack test (2026-11-05): `net_flow` is now `arrivals − completed`, not
 `arrivals − requests`. Cancelled and open requests had counted as a drain, which proposed a 10 RON
@@ -367,8 +367,7 @@ The LLM **explains**. It doesn't calculate:
   rule, metrics}], skipped, zones, explained_by: "model"|"template", model, note}`. This is the
   shape steps 6–7 build on.
 - `list_observations` is removed from the MCP server. `HelloModel` became `CappedModel`.
-- **Not done yet:** the dashboard still shows the run result as raw JSON under "hello world"
-  wording (step 8).
+- The dashboard's raw-JSON "hello world" view was replaced by the Reports view in step 8.
 
 ## 7. Report, schedule and email
 
@@ -611,13 +610,33 @@ Steps 1–4 can be built and demoed without email or RabbitMQ. Steps 6–7 can r
    off-limits.
 2. ~~**Read path**~~: **answered 2026-11-03: option B** (stats endpoints in `core`, no
    database access for the MCP server).
-3. **Answered 2026-11-03: our part doesn't use `core.proposals`.** The table stays for now, because approving a proposal is still the only code that creates surge rules and incentives. Removing it is a later decision with Andy. *Original question:* **Should proposals still show up in `core.proposals`?** In this plan, a person creates them
-   from the report. If proposals need to appear there automatically, *something other than the
-   agent* has to write them, e.g. a small consumer of `report.ready` running under `core`'s own
-   authority. That needs agreement on whether it still meets the "agent never writes" rule.
+3. ~~**Should proposals still show up in `core.proposals` automatically?**~~ If they did,
+   *something other than the agent* would have to write them, e.g. a consumer of `report.ready`
+   running under `core`'s own authority. **Answered 2026-11-03: no**, the agent doesn't use
+   `core.proposals`. A proposal reaches it only when a person approves it from the report
+   (section 7.4). The table stays, because approving a proposal is still the only code that
+   creates surge rules and incentives. Removing it is a later decision with Andy.
 4. **SMTP provider** for production (university SMTP, a transactional mail service, …) and the
    sender address.
 5. **Tuning targets**: acceptable p90 wait, maximum surge we're comfortable proposing (the API
    allows 3.0; this plan caps at 2.0), incentive budget.
 6. `db-schema.md` links to `trip-domain-scope.md`, which isn't in the repo. Is there extra
    scope in it that we should know about?
+
+---
+
+## 11. Known gaps (accepted for now)
+
+1. **The agent container holds the `SERVICE` login**, because the gateway uses it to call the
+   agent. The cluster network policy blocks agent → core, but local Compose doesn't. Fix: a
+   separate login for the gateway → agent hop (section 1.2).
+2. **Proposal windows** are always the next full UTC hour + 2 h. Matching the hour of day that
+   triggered the proposal isn't built (section 6.1).
+3. **Past driver supply** is only estimated from offers; `core` keeps only current driver state
+   (section 4).
+4. **Parked emails** are shown in the dashboard, but there is no resend action.
+5. **Test coverage:** the browser check of the Reports view isn't in CI, and `core` has no Java unit
+   tests; `Stats` and `Auth` are covered only by `stats-check` and `readonly-check`.
+6. **Before the first cluster deploy:** set `READER_USERNAME`/`READER_PASSWORD` (required) and
+   follow the upgrade order in `deploy/README.md`. Without SMTP settings (Q4) every report is
+   recorded as `not_configured`.

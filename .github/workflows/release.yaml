@@ -3,12 +3,16 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**/*.md']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**/*.md']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: unter-release
-  cancel-in-progress: false
+  # Pull requests only run the tests, in their own group; a newer push cancels the older run.
+  group: ${{ github.event_name == 'pull_request' && format('unter-pr-{0}', github.ref) || 'unter-release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -37,6 +41,7 @@ jobs:
         run: docker compose down -v
   build:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
