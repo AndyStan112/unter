@@ -61,8 +61,33 @@ def _send(smtp: Smtp, message) -> None:
         if smtp.security == 'starttls':
             client.starttls(context=context)
         if smtp.user:
-            client.login(smtp.user, smtp.password or '')
+            login(client, smtp.user, smtp.password or '')
         client.send_message(message)
+
+
+def login(client: smtplib.SMTP, user: str, password: str) -> None:
+    """client.login, but a rejected login is reported as the rejection.
+
+    smtplib tries the next auth method after a 535. Servers such as Gmail close the connection
+    first, so login() raises SMTPServerDisconnected and the 535 is lost.
+    """
+    rejected: list[smtplib.SMTPAuthenticationError] = []
+    auth = client.auth
+
+    def remember_rejection(*args, **kwargs):
+        try:
+            return auth(*args, **kwargs)
+        except smtplib.SMTPAuthenticationError as error:
+            rejected.append(error)
+            raise
+
+    client.auth = remember_rejection
+    try:
+        client.login(user, password)
+    except smtplib.SMTPServerDisconnected:
+        if rejected:
+            raise rejected[0] from None
+        raise
 
 
 async def send_email(smtp: Smtp, message) -> None:

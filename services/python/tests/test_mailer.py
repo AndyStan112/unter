@@ -95,6 +95,40 @@ async def test_smtp_errors_keep_only_class_and_code():
     assert mailer.safe_error(error) == 'SMTPAuthenticationError (SMTP 535)'
 
 
+class GmailLikeServer(smtplib.SMTP):
+    """Rejects the first auth method with 535, then drops the connection, as Gmail does."""
+
+    def __init__(self, replies):
+        super().__init__()  # no host: nothing connects
+        self.ehlo_resp = b'smtp.example.com'
+        self.esmtp_features = {'auth': ' PLAIN LOGIN'}
+        self.replies = list(replies)
+
+    def docmd(self, cmd, args=''):
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def test_rejected_login_is_reported_even_when_the_server_hangs_up():
+    server = GmailLikeServer([(535, b'5.7.8 Username and Password not accepted'),
+                              smtplib.SMTPServerDisconnected('Connection unexpectedly closed')])
+    with pytest.raises(smtplib.SMTPAuthenticationError) as caught:
+        mailer.login(server, 'user@example.com', 'app-password')
+    assert mailer.safe_error(caught.value) == 'SMTPAuthenticationError (SMTP 535)'
+
+
+def test_disconnect_without_a_rejection_stays_a_disconnect():
+    server = GmailLikeServer([smtplib.SMTPServerDisconnected('Connection unexpectedly closed')])
+    with pytest.raises(smtplib.SMTPServerDisconnected):
+        mailer.login(server, 'user@example.com', 'app-password')
+
+
+def test_accepted_login_passes():
+    mailer.login(GmailLikeServer([(235, b'2.7.0 Accepted')]), 'user@example.com', 'app-password')
+
+
 @pytest.mark.parametrize('data, smtp, outcome', [
     (DATA | {'recipients': []}, SMTP, 'skipped'),
     (DATA, None, 'not_configured'),
