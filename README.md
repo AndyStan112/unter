@@ -132,6 +132,16 @@ the cooldown. It creates a rejected test proposal, a run and a report. Run it ag
 fresh local stack with scheduling disabled. It never prints credentials or model
 responses. To test real inference, start the stack with `AGENT_MODE=live` instead.
 
+## Concurrent market simulation
+
+`make simulate` runs parallel rider and driver clients through the real gateway, with
+random traffic, rotating demand hotspots and deliberate booking/offer transition races.
+It retains trips and events for analytics and writes timestamped timings, checks and
+stats snapshots under `.local/simulations/`. Use an isolated local or staging stack;
+startup refuses existing active traffic. See [client simulator](docs/client-simulator.md)
+for soak runs, configuration, cleanup and evidence. CI runs a short simulation and saves
+its evidence as an artifact.
+
 ## Deployment
 
 See [deploy/README.md](deploy/README.md). Successful pushes to `main` run checks,
