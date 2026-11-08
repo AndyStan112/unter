@@ -6,6 +6,7 @@ resources:
 - core.yaml
 - db-init.yaml
 - gateway.yaml
+- mailer.yaml
 - mcp.yaml
 - namespace.yaml
 - network-policy.yaml
@@ -15,7 +16,7 @@ resources:
 images:
 - name: unter-core
   newName: ghcr.io/andystan112/unter-core
-  newTag: 8900cae2792f8c9bd931c943eb4372f818807346
+  newTag: 05a845349da4178820a99f6d42e92fa7a2297df9
 - name: unter-python
   newName: ghcr.io/andystan112/unter-python
-  newTag: 8900cae2792f8c9bd931c943eb4372f818807346
+  newTag: 05a845349da4178820a99f6d42e92fa7a2297df9
