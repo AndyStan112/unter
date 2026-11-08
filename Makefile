@@ -1,4 +1,4 @@
-.PHONY: init up dev test integration migrations-check readonly-check stats-check deploy
+.PHONY: init up dev test integration migrations-check readonly-check stats-check simulate deploy
 init:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv sync --project services/python --frozen
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/init-env.py
@@ -19,5 +19,7 @@ readonly-check:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/readonly-check.py
 stats-check:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/stats-check.py
+simulate:
+	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/simulate.py $(SIM_ARGS)
 deploy:
 	bash scripts/bootstrap-deploy.sh

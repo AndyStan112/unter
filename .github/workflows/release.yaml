@@ -35,6 +35,16 @@ jobs:
           uv run --project services/python python scripts/readonly-check.py
           uv run --project services/python python scripts/stats-check.py
           uv run --project services/python python scripts/schedule-check.py
+          uv run --project services/python python scripts/simulate.py --duration 30 --riders 8 --drivers 3 --race-rounds 2 --pace 0.3 --snapshot-interval 5 --output .local/simulations
+      - name: Save simulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-evidence
+          path: .local/simulations/*.jsonl
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
       - if: failure()
         run: docker compose ps
       - if: always()
