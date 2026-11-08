@@ -10,6 +10,7 @@ values = dotenv_values(path)
 defaults = {
     'ADMIN_USERNAME': 'admin', 'ADMIN_PASSWORD': secrets.token_urlsafe(32),
     'SERVICE_USERNAME': 'unter-service', 'SERVICE_PASSWORD': secrets.token_urlsafe(32),
+    'READER_USERNAME': 'unter-reader', 'READER_PASSWORD': secrets.token_urlsafe(32),
     'POSTGRES_PASSWORD': secrets.token_urlsafe(32),
     'CORE_DB_PASSWORD': secrets.token_urlsafe(32),
     'AGENT_DB_PASSWORD': secrets.token_urlsafe(32),

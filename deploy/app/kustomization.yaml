@@ -6,6 +6,7 @@ resources:
 - core.yaml
 - db-init.yaml
 - gateway.yaml
+- mailer.yaml
 - mcp.yaml
 - namespace.yaml
 - network-policy.yaml

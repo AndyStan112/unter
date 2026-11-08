@@ -49,6 +49,16 @@ spec:
             secretKeyRef:
               name: unter-secrets
               key: SERVICE_PASSWORD
+        - name: READER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: READER_USERNAME
+        - name: READER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: READER_PASSWORD
         - name: DB_HOST
           value: postgres
         - name: DB_NAME
@@ -76,6 +86,11 @@ spec:
           value: '30'
         - name: AGNO_TELEMETRY
           value: 'false'
+        - name: RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unter-secrets
+              key: RABBITMQ_PASSWORD
         - name: SERVICE_MODULE
           value: agent
         securityContext:

@@ -95,6 +95,13 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rabbitmq
+    ports:
+    - protocol: TCP
+      port: 5672
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -149,6 +156,32 @@ spec:
   podSelector:
     matchLabels:
       app: worker
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rabbitmq
+    ports:
+    - protocol: TCP
+      port: 5672
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailer-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: mailer
   policyTypes:
   - Egress
   egress:
@@ -289,6 +322,13 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
+  - from:
+    - podSelector:
+        matchLabels:
+          app: mailer
+    ports:
+    - protocol: TCP
+      port: 5432
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -304,6 +344,13 @@ spec:
   - from:
     - podSelector:
         matchLabels:
+          app: agent
+    ports:
+    - protocol: TCP
+      port: 5672
+  - from:
+    - podSelector:
+        matchLabels:
           app: core
     ports:
     - protocol: TCP
@@ -312,6 +359,13 @@ spec:
     - podSelector:
         matchLabels:
           app: worker
+    ports:
+    - protocol: TCP
+      port: 5672
+  - from:
+    - podSelector:
+        matchLabels:
+          app: mailer
     ports:
     - protocol: TCP
       port: 5672
@@ -333,6 +387,32 @@ spec:
     ports:
     - protocol: TCP
       port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailer-smtp
+spec:
+  podSelector:
+    matchLabels:
+      app: mailer
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+        - 127.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 465
+    - protocol: TCP
+      port: 587
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

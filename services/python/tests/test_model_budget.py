@@ -1,18 +1,17 @@
 import pytest
 from agno.models.openai import OpenAIChat
-from unter.model import HelloModel
+from unter.model import CappedModel, MAX_MODEL_REQUESTS
 
 
-async def test_forced_read_becomes_final_text_and_third_request_is_blocked(monkeypatch):
-    requests=[]
+async def test_requests_beyond_the_cap_never_reach_the_provider(monkeypatch):
+    requests = []
     async def provider(self, *args, **kwargs):
-        requests.append(kwargs['tool_choice'])
+        requests.append(kwargs)
         return 'provider-response'
-    monkeypatch.setattr(OpenAIChat,'ainvoke',provider)
-    model=HelloModel(id='test-model',api_key='test')
-    forced={'type':'function','function':{'name':'list_observations'}}
-    await model.ainvoke(tool_choice=forced)
-    await model.ainvoke(tool_choice=forced)
-    with pytest.raises(RuntimeError,match='request limit'):
-        await model.ainvoke(tool_choice=forced)
-    assert requests==[forced,'none']
+    monkeypatch.setattr(OpenAIChat, 'ainvoke', provider)
+    model = CappedModel(id='test-model', api_key='test')
+    for _ in range(MAX_MODEL_REQUESTS):
+        assert await model.ainvoke() == 'provider-response'
+    with pytest.raises(RuntimeError, match='request limit'):
+        await model.ainvoke()
+    assert len(requests) == MAX_MODEL_REQUESTS == 2

@@ -12,6 +12,10 @@ def secret(key): return {'valueFrom':{'secretKeyRef':{'name':'unter-secrets','ke
 def env(name, value): return {'name':name,'value':str(value)}
 def sec(name,key=None): return {'name':name,**secret(key or name)}
 auth=[sec('SERVICE_USERNAME'),sec('SERVICE_PASSWORD')]
+# Read-only login: core refuses it for anything but GET. The MCP server holds only this one.
+reader=[sec('READER_USERNAME'),sec('READER_PASSWORD')]
+def optional(name): return {'name':name,'valueFrom':{'secretKeyRef':{'name':'unter-secrets','key':name,'optional':True}}}
+smtp=[optional(name) for name in ('SMTP_HOST','SMTP_PORT','SMTP_SECURITY','SMTP_USER','SMTP_PASSWORD','MAIL_FROM')]
 def database(name): return [env('DB_HOST','postgres'),env('DB_NAME',name),env('DB_USER',name),sec('DB_PASSWORD',name.upper()+'_DB_PASSWORD')]
 
 save('namespace.yaml',[
@@ -20,11 +24,13 @@ save('namespace.yaml',[
  {'apiVersion':'v1','kind':'ResourceQuota','metadata':meta('unter-budget'),'spec':{'hard':{'requests.cpu':'3','requests.memory':'4Gi','limits.cpu':'8','limits.memory':'6Gi','requests.storage':'8Gi','persistentvolumeclaims':'4','pods':'16'}}},
 ])
 services={
- 'core':{'image':'unter-core','port':8080,'env':auth+database('core')+[sec('RABBITMQ_PASSWORD')],'memory':'768Mi','cpu':'100m'},
+ 'core':{'image':'unter-core','port':8080,'env':auth+reader+database('core')+[sec('RABBITMQ_PASSWORD')],'memory':'768Mi','cpu':'100m'},
  'worker':{'module':'worker','env':auth+database('activity')+[sec('RABBITMQ_PASSWORD')],'memory':'512Mi'},
- 'mcp':{'module':'mcp_server','env':auth,'memory':'512Mi'},
- 'agent':{'module':'agent','env':auth+database('agent')+[sec('OPENAI_API_KEY'),sec('OPENAI_MODEL'),env('AGENT_MODE','live'),env('MAX_DAILY_RUNS','30'),env('AGNO_TELEMETRY','false')],'memory':'768Mi'},
- 'gateway':{'module':'gateway','env':auth+[sec('ADMIN_USERNAME'),sec('ADMIN_PASSWORD')],'memory':'256Mi'},
+ 'mcp':{'module':'mcp_server','env':reader,'memory':'512Mi'},
+ 'agent':{'module':'agent','env':auth+reader+database('agent')+[sec('OPENAI_API_KEY'),sec('OPENAI_MODEL'),env('AGENT_MODE','live'),env('MAX_DAILY_RUNS','30'),env('AGNO_TELEMETRY','false'),sec('RABBITMQ_PASSWORD')],'memory':'768Mi'},
+ # The mailer records delivery state in the agent database (report_deliveries), with the agent's login.
+ 'mailer':{'module':'mailer','env':database('agent')+[sec('RABBITMQ_PASSWORD')]+smtp,'memory':'256Mi','cpu_limit':'250m'},
+ 'gateway':{'module':'gateway','env':auth+reader+[sec('ADMIN_USERNAME'),sec('ADMIN_PASSWORD')],'memory':'256Mi'},
 }
 for name, spec in services.items():
     port=spec.get('port',8000)
@@ -32,7 +38,7 @@ for name, spec in services.items():
     labels={'app':name}
     container={'name':name,'image':spec.get('image','unter-python'),'ports':[{'containerPort':port}],
         'env':variables,'securityContext':{'allowPrivilegeEscalation':False,'capabilities':{'drop':['ALL']}},
-        'resources':{'requests':{'cpu':spec.get('cpu','25m'),'memory':'128Mi'},'limits':{'cpu':'1','memory':spec['memory']}},
+        'resources':{'requests':{'cpu':spec.get('cpu','25m'),'memory':'128Mi'},'limits':{'cpu':spec.get('cpu_limit','1'),'memory':spec['memory']}},
         'readinessProbe':{'httpGet':{'path':'/healthz','port':port},'periodSeconds':5},
         'livenessProbe':{'httpGet':{'path':'/healthz','port':port},'periodSeconds':20,'failureThreshold':6},
         'startupProbe':{'httpGet':{'path':'/healthz','port':port},'periodSeconds':5,'failureThreshold':60}}
@@ -66,13 +72,14 @@ for name,image,port,variables,mount,size,probe in [
 policies=[{'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('default-deny'),'spec':{'podSelector':{},'policyTypes':['Ingress','Egress']}},
  {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('dns'),'spec':{'podSelector':{},'policyTypes':['Egress'],'egress':[{'to':[{'namespaceSelector':{'matchLabels':{'kubernetes.io/metadata.name':'kube-system'}},'podSelector':{'matchLabels':{'k8s-app':'kube-dns'}}}],'ports':[{'protocol':p,'port':53} for p in ['UDP','TCP']]}]}}]
 # Explicit source/destination pairs: no cross-project database or service access.
-links={'gateway':[('core',8080),('worker',8000),('agent',8000),('mcp',8000)],'agent':[('mcp',8000),('postgres',5432)],'mcp':[('core',8080)],'core':[('postgres',5432),('rabbitmq',5672)],'worker':[('rabbitmq',5672),('postgres',5432)]}
+links={'gateway':[('core',8080),('worker',8000),('agent',8000),('mcp',8000)],'agent':[('mcp',8000),('postgres',5432),('rabbitmq',5672)],'mcp':[('core',8080)],'core':[('postgres',5432),('rabbitmq',5672)],'worker':[('rabbitmq',5672),('postgres',5432)],'mailer':[('rabbitmq',5672),('postgres',5432)]}
 for source,targets in links.items():
     policies.append({'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta(source+'-egress'),'spec':{'podSelector':{'matchLabels':{'app':source}},'policyTypes':['Egress'],'egress':[{'to':[{'podSelector':{'matchLabels':{'app':target}}}],'ports':[{'protocol':'TCP','port':port}]} for target,port in targets]}})
 for target in ['core','worker','agent','mcp','postgres','rabbitmq']:
     policies.append({'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta(target+'-ingress'),'spec':{'podSelector':{'matchLabels':{'app':target}},'policyTypes':['Ingress'],'ingress':[{'from':[{'podSelector':{'matchLabels':{'app':source}}}],'ports':[{'protocol':'TCP','port':port}]} for source,targets in links.items() for dest,port in targets if dest==target]}})
 policies.extend([
  {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('gateway-caddy'),'spec':{'podSelector':{'matchLabels':{'app':'gateway'}},'policyTypes':['Ingress'],'ingress':[{'from':[{'ipBlock':{'cidr':'172.22.0.0/16'}}],'ports':[{'protocol':'TCP','port':8000}]}]}},
+ {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('mailer-smtp'),'spec':{'podSelector':{'matchLabels':{'app':'mailer'}},'policyTypes':['Egress'],'egress':[{'to':[{'ipBlock':{'cidr':'0.0.0.0/0','except':['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','127.0.0.0/8']}}],'ports':[{'protocol':'TCP','port':p} for p in (465,587)]}]}},
  {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('agent-openai'),'spec':{'podSelector':{'matchLabels':{'app':'agent'}},'policyTypes':['Egress'],'egress':[{'to':[{'ipBlock':{'cidr':'0.0.0.0/0','except':['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','127.0.0.0/8']}}],'ports':[{'protocol':'TCP','port':443}]}]}}
 ])
 save('network-policy.yaml',policies)

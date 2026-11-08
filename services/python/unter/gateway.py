@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from pathlib import Path
@@ -25,10 +26,77 @@ ROUTES = {
     'activity': ('WORKER_URL', 'http://worker:8000', '/activity', {'GET'}),
     'schedule': ('AGENT_URL', 'http://agent:8000', '/schedule', {'GET', 'PUT'}),
     'runs': ('AGENT_URL', 'http://agent:8000', '/runs', {'GET'}),
+    'reports': ('AGENT_URL', 'http://agent:8000', '/reports', {'GET'}),
     'run': ('AGENT_URL', 'http://agent:8000', '/run', {'POST'}),
     'openapi': ('CORE_URL', 'http://core:8080', '/v3/api-docs', {'GET'}),
 }
 SEGMENT = re.compile(r'[A-Za-z0-9_-]+')
+UUID_TEXT = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+MAX_REASON = 1000
+
+
+def core_reason(proposal: dict, report_id: str) -> str:
+    """The report's reason, with where it came from, within core's 1000-character limit."""
+    suffix = f" (Unter report {report_id[:8]}, {proposal['id']})"
+    return proposal['reason'][:MAX_REASON - len(suffix)] + suffix
+
+
+def detail(response: httpx.Response, fallback: str) -> str:
+    try:
+        body = response.json()
+        return str(body.get('detail') or body.get('message') or fallback)
+    except ValueError:
+        return fallback
+
+
+@api.post('/reports/{report_id}/decisions')
+async def decide(report_id: str, request: Request):
+    """Approve or reject one proposal of a stored report, as the logged-in operator.
+
+    The browser names the proposal; its zone and numbers come from the stored report via the agent,
+    so they can't be changed on the way. Approving creates and approves the proposal in core with
+    the gateway's login, which is what creates the surge rule or incentive. The agent never does.
+    """
+    if not UUID_TEXT.fullmatch(report_id):
+        return JSONResponse({'detail': 'Not found'}, 404)
+    raw = await request.body()
+    if len(raw) > 16384:
+        return JSONResponse({'detail': 'Request too large'}, 413)
+    try:
+        body = json.loads(raw)
+        proposal_id, decision = body['proposal_id'], body['decision']
+        assert isinstance(proposal_id, str) and decision in ('approved', 'rejected')
+    except (ValueError, KeyError, TypeError, AssertionError):
+        return JSONResponse({'detail': 'Send proposal_id and decision (approved or rejected)'}, 422)
+    agent = os.getenv('AGENT_URL', 'http://agent:8000')
+    core = os.getenv('CORE_URL', 'http://core:8080')
+    headers = {'Authorization': basic_header()}
+    key = {'report_id': report_id, 'proposal_id': proposal_id}
+    try:
+        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+            claim = await client.post(agent + '/decisions', json={**key, 'decision': decision})
+            if claim.status_code != 200:
+                return JSONResponse({'detail': detail(claim, 'Could not record the decision')}, claim.status_code)
+            if decision == 'rejected':
+                return JSONResponse({'status': 'rejected'})
+            proposal = claim.json()['proposal']
+            created = await client.post(core + '/proposals', json={
+                'zone': proposal['zone'], 'type': proposal['type'], 'params': proposal['params'],
+                'reason': core_reason(proposal, report_id)})
+            if created.status_code not in (200, 201):
+                await client.delete(agent + '/decisions', params=key)
+                return JSONResponse({'detail': 'Core refused the proposal: ' + detail(created, 'unknown error')},
+                                    created.status_code if created.status_code < 500 else 502)
+            core_id = created.json()['id']
+            approved = await client.patch(f'{core}/proposals/{core_id}', json={'status': 'approved'})
+            status = 'applied' if approved.status_code == 200 else 'created'
+            await client.put(agent + '/decisions', json={**key, 'status': status, 'core_proposal_id': core_id})
+            if status == 'created':
+                return JSONResponse({'detail': 'The proposal was created in core but not approved. '
+                                               'Approve it under Proposals.', 'core_proposal_id': core_id}, 502)
+            return JSONResponse({'status': 'applied', 'core_proposal_id': core_id})
+    except httpx.HTTPError:
+        return JSONResponse({'detail': 'Service temporarily unavailable'}, 503)
 
 
 @api.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH'])
@@ -73,7 +141,7 @@ async def mcp_proxy(request: Request):
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.request(request.method, os.getenv('MCP_URL', 'http://mcp:8000/mcp'),
                 content=await request.body(), headers={
-                    'Authorization': basic_header(),
+                    'Authorization': basic_header('READER'),
                     'Content-Type': request.headers.get('content-type', 'application/json'),
                     'Accept': request.headers.get('accept', 'application/json, text/event-stream'),
                     'MCP-Protocol-Version': request.headers.get('mcp-protocol-version', '2025-06-18'),

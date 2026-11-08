@@ -84,6 +84,12 @@ else:
             list(pool.map(upgrade, range(2)))
     with connect() as db:
         assert db.execute('SELECT version_num FROM alembic_version').fetchone()['version_num'] == head
+        if service == 'agent':
+            # agent_0002-0004: one default settings row; empty reports, outbox, deliveries and decisions.
+            assert db.execute('SELECT id, window_hours, recipients FROM report_settings').fetchall() == [
+                {'id': 1, 'window_hours': 24, 'recipients': []}]
+            assert db.execute('SELECT (SELECT count(*) FROM reports) + (SELECT count(*) FROM agent_outbox) '
+                              '+ (SELECT count(*) FROM report_deliveries) + (SELECT count(*) FROM report_decisions) AS n').fetchone()['n'] == 0
     if before is not None:
         assert snapshot() == before, 'Legacy rows or schedule were changed'
     else:

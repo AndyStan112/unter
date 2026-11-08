@@ -39,16 +39,16 @@ spec:
         ports:
         - containerPort: 8000
         env:
-        - name: SERVICE_USERNAME
+        - name: READER_USERNAME
           valueFrom:
             secretKeyRef:
               name: unter-secrets
-              key: SERVICE_USERNAME
-        - name: SERVICE_PASSWORD
+              key: READER_USERNAME
+        - name: READER_PASSWORD
           valueFrom:
             secretKeyRef:
               name: unter-secrets
-              key: SERVICE_PASSWORD
+              key: READER_PASSWORD
         - name: SERVICE_MODULE
           value: mcp_server
         securityContext:

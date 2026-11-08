@@ -9,3 +9,19 @@ services:
   worker: *reload
   mcp: *reload
   gateway: *reload
+  # Mailpit catches every report email locally: open http://localhost:8025. Nothing leaves the machine.
+  mailer:
+    <<: *reload
+    environment:
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_SECURITY: none
+      SMTP_USER: ''
+      SMTP_PASSWORD: ''
+      MAIL_FROM: Unter reports <reports@unter.local>
+    depends_on:
+      mailpit: {condition: service_started}
+  mailpit:
+    image: axllent/mailpit:v1.20.0
+    restart: unless-stopped
+    ports: ['127.0.0.1:8025:8025']

@@ -8,6 +8,10 @@ x-python: &python
 x-auth: &auth
   SERVICE_USERNAME: ${SERVICE_USERNAME:?Run scripts/init-env.py first}
   SERVICE_PASSWORD: ${SERVICE_PASSWORD:?Run scripts/init-env.py first}
+# Read-only login: core refuses it for anything but GET. The MCP server holds only this one.
+x-reader: &reader
+  READER_USERNAME: ${READER_USERNAME:?Run scripts/init-env.py first}
+  READER_PASSWORD: ${READER_PASSWORD:?Run scripts/init-env.py first}
 x-db: &db
   DB_HOST: postgres
 services:
@@ -48,7 +52,7 @@ services:
       dockerfile: services/core/Dockerfile
     restart: unless-stopped
     environment:
-      <<: [*auth, *db]
+      <<: [*auth, *reader, *db]
       DB_PASSWORD: ${CORE_DB_PASSWORD:?}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
     depends_on:
@@ -69,13 +73,13 @@ services:
   mcp:
     <<: *python
     environment:
-      <<: *auth
+      <<: *reader
       SERVICE_MODULE: mcp_server
     depends_on: [core]
   agent:
     <<: *python
     environment:
-      <<: [*auth, *db]
+      <<: [*auth, *reader, *db]
       SERVICE_MODULE: agent
       DB_NAME: agent
       DB_USER: agent
@@ -85,16 +89,39 @@ services:
       AGENT_MODE: ${AGENT_MODE:-live}
       MAX_DAILY_RUNS: ${MAX_DAILY_RUNS:-30}
       AGNO_TELEMETRY: 'false'
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
     depends_on:
       postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
       mcp: {condition: service_started}
+  mailer:
+    <<: *python
+    environment:
+      <<: *db
+      SERVICE_MODULE: mailer
+      # Delivery state goes to the agent database's report_deliveries (the agent migrates it).
+      DB_NAME: agent
+      DB_USER: agent
+      DB_PASSWORD: ${AGENT_DB_PASSWORD:?}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+      # Without SMTP_HOST, reports are marked not_configured instead of emailed.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      agent: {condition: service_started}
   gateway:
     <<: *python
     build:
       context: .
       dockerfile: services/python/Dockerfile
     environment:
-      <<: *auth
+      <<: [*auth, *reader]
       SERVICE_MODULE: gateway
       ADMIN_USERNAME: ${ADMIN_USERNAME:?}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}

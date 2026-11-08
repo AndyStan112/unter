@@ -9,3 +9,5 @@ __pycache__/
 node_modules/
 .local/
 *.log
+.idea/
+.mcp.json

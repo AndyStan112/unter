@@ -24,8 +24,8 @@ async def main():
                 new=[r for r in rows if r['id'] not in baseline and r['source']=='schedule']
                 if new and new[0]['status']!='running':
                     assert new[0]['status']=='completed',new[0]['error']
-                    assert 'list_observations' in new[0]['tool_calls']
-                    print('PASS: enabled cron triggered a completed Agno/MCP hello-world run')
+                    assert new[0]['tool_calls']==['zone_snapshot']
+                    print('PASS: enabled cron triggered a completed MCP report run')
                     return
             raise AssertionError('Scheduler did not complete a run')
         finally:

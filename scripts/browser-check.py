@@ -13,8 +13,8 @@ load_dotenv()
 
 async def main():
     base=os.getenv('UNTER_URL','http://localhost:5180')
-    with tempfile.TemporaryDirectory(prefix='unter-browser-') as profile:
-        browser=subprocess.Popen(['chromium-browser','--headless','--disable-gpu','--no-sandbox',
+    with tempfile.TemporaryDirectory(prefix='unter-browser-',ignore_cleanup_errors=True) as profile:
+        browser=subprocess.Popen([os.getenv('BROWSER','chromium-browser'),'--headless','--disable-gpu','--no-sandbox',
             '--remote-debugging-port=9337','--remote-allow-origins=http://localhost:9337',
             '--user-data-dir='+profile,'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         try:
@@ -55,6 +55,12 @@ async def main():
                 Path('.local').mkdir(exist_ok=True)
                 shot=await command('Page.captureScreenshot',{'format':'png','captureBeyondViewport':True})
                 Path('.local/dashboard-desktop.png').write_bytes(base64.b64decode(shot['data']))
+                await evaluate("document.querySelector('[data-view=reports]').click()")
+                for _ in range(20):
+                    if await evaluate("document.querySelectorAll('#report-list .report').length > 0"):break
+                    await asyncio.sleep(.5)
+                else: raise AssertionError('Reports view shows no report; run make integration first')
+                assert await evaluate("document.querySelector('#report-list .report p').textContent.length > 0")
                 await evaluate("document.querySelector('[data-view=agent]').click()")
                 assert await evaluate("!document.querySelector('#agent').hidden")
                 await evaluate("document.querySelector('#cron').value='30 */3 * * *'; document.querySelector('#schedule-form').requestSubmit(document.querySelector('#schedule-form button'))")
@@ -63,14 +69,15 @@ async def main():
                 await evaluate("document.querySelector('#cron').value='0 * * * *'; document.querySelector('#schedule-form').requestSubmit(document.querySelector('#schedule-form button'))")
                 await asyncio.sleep(1)
                 await command('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True})
-                await evaluate("document.querySelector('[data-view=overview]').click()")
-                await asyncio.sleep(.5)
-                assert await evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+                for view in ('reports','overview'):
+                    await evaluate(f"document.querySelector('[data-view={view}]').click()")
+                    await asyncio.sleep(.5)
+                    assert await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), f'{view} overflows on mobile'
                 shot=await command('Page.captureScreenshot',{'format':'png','captureBeyondViewport':True})
                 Path('.local/dashboard-mobile.png').write_bytes(base64.b64decode(shot['data']))
                 cached=await evaluate("(async()=>{await navigator.serviceWorker.ready; const keys=await caches.keys();return (await Promise.all(keys.map(async key=>(await (await caches.open(key)).keys()).map(r=>new URL(r.url).pathname)))).flat()})()")
                 assert '/' in cached and not any(p.startswith(('/api','/mcp')) for p in cached)
-                print('PASS: desktop/mobile UI, seeded data, schedule form, responsive layout, static-only PWA cache')
+                print('PASS: desktop/mobile UI, seeded data, reports view, schedule form, responsive layout, static-only PWA cache')
         finally:
             browser.terminate()
             browser.wait(timeout=10)

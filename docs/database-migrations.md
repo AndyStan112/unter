@@ -70,6 +70,18 @@ recovery plan; reverting an image does not undo database migrations.
 
 ## Existing databases from the original skeleton
 
+Current Alembic revisions:
+
+| Chain | Revision | Adds |
+|---|---|---|
+| agent | `agent_0001` | `schedule`, `runs` (adopts the original tables) |
+| agent | `agent_0002` | `report_settings` (one row), `reports`, `agent_outbox` |
+| agent | `agent_0003` | `report_deliveries` (written by the mailer, which uses the agent login) |
+| agent | `agent_0004` | `report_decisions` (approve/reject per reported proposal) |
+| activity | `activity_0001` | `activity` (adopts the original table) |
+
+All later revisions only add tables, so an older agent image keeps working against them.
+
 The initial Alembic revisions are `agent_0001` and `activity_0001`. For an empty
 database they create the tables. For an existing unversioned database, they verify
 column types, nullability, defaults, primary keys and check/unique/foreign-key
