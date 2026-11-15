@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#182b28"><meta name="description" content="Unter control room: surge and incentive reports">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css">
 <title>Unter · Control room</title>
 </head>
 <body>
 <aside><a class="brand" href="/" aria-label="Unter home"><img src="/icon.svg" alt="" width="38" height="38">unter<span>LAB</span></a>
-<div class="workspace">WORKSPACE <strong>Development sandbox</strong><span class="workspace-note">Surge &amp; incentive reports.</span></div>
+<div class="workspace">WORKSPACE <strong>Development sandbox</strong><span class="workspace-note">Surge &amp; incentive reports.</span><a href="/ride/">Open passenger &amp; driver app ↗</a></div>
 <nav aria-label="Main navigation"><button class="nav active" data-view="overview"><span>◫</span> Overview</button><button class="nav" data-view="reports"><span>◩</span> Reports</button><button class="nav" data-view="agent"><span>✳</span> Schedule &amp; runs</button><button class="nav" data-view="activity"><span>≋</span> Event activity</button><button class="nav" data-view="proposals"><span>▤</span> Proposals</button></nav>
 <div class="sidebar-bottom"><span class="dot"></span> Unter environment <small>Isolated workspace · v0.2</small></div></aside>
-<main><header><span>WORKSPACE <b>/</b> <span id="breadcrumb">Overview</span></span><div><span id="connection" class="pill">Connecting</span><button id="refresh" class="quiet">↻ Refresh</button><button id="install" class="quiet" hidden>Install app</button></div></header>
+<main><header><span>WORKSPACE <b>/</b> <span id="breadcrumb">Overview</span></span><div><span id="connection" class="pill">Connecting</span><button id="refresh" class="quiet">↻ Refresh</button></div></header>
 <div class="content"><div id="notice" class="notice" role="status" hidden></div>
 <section id="overview" class="view"><div class="page-heading"><div class="eyebrow">THE CONTROL ROOM</div><h1>Where demand meets supply<span>.</span></h1><p>Zone metrics, the agent's surge and incentive reports, and your decisions. One connected workspace.</p></div>
 <div class="stats"><article><span class="stat-label">ZONES</span><strong id="zone-count">—</strong><small>Seeded in PostgreSQL</small></article><article><span class="stat-label">LATEST REPORT</span><strong id="report-count">—</strong><small id="report-summary-label">Proposals waiting for a decision</small></article><article><span class="stat-label">AUTOMATION</span><strong id="automation">—</strong><small id="schedule-summary">Loading schedule</small></article></div>
@@ -28,5 +28,5 @@
 <section id="activity" class="view" hidden><div class="page-heading"><div class="eyebrow">THE EVENT PIPELINE</div><h1>A record of what happened<span>.</span></h1><p>Java and agent outboxes → RabbitMQ → Python worker. Delivered events appear here.</p></div><article class="card"><div id="events"></div></article></section>
 <section id="proposals" class="view" hidden><div class="page-heading"><div class="eyebrow">IN CORE</div><h1>Proposals in core<span>.</span></h1><p>Proposals approved from reports appear here, as do test proposals. The agent never creates them.</p></div><article class="card"><div id="proposal-list"></div><details><summary>Create a test proposal</summary><form id="proposal-form"><label>Zone<select id="proposal-zone"></select></label><label>Reason<textarea id="proposal-reason" required maxlength="1000" placeholder="A demonstration proposal to exercise the event pipeline"></textarea></label><button class="primary">Create pending proposal</button></form></details></article></section>
 <footer><span>unter / development sandbox</span><span>Rules decide. People approve.</span></footer></div></main>
-<script type="module" src="/app.js"></script>
+<script src="/retire-dashboard-worker.js"></script><script type="module" src="/app.js"></script>
 </body></html>

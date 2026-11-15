@@ -3,7 +3,24 @@
 A deliberately small distributed application: seeded PostgreSQL rows, a Java API,
 RabbitMQ events, a Python worker and read-only MCP server, an Agno agent that proposes
 surge rates and driver incentives in a report, and an
-installable admin PWA. No ride-hailing platform is implemented.
+installable admin PWA and a shared passenger/driver web app.
+
+## Passenger and driver frontend
+
+Open `/ride/` on the same origin as the gateway (locally, <http://localhost:5180/ride/>).
+The responsive, buildless app has passenger and driver modes, with separate profiles
+remembered in browser local storage. Use two browsers or devices to try both sides:
+create a driver, choose a zone or enable live GPS, go online, then create a passenger
+and request a trip. The driver can accept or decline, confirm pickup and complete;
+the passenger can follow progress and cancel before pickup. Keep the driver app
+open: it polls every 2.5 seconds and sends location roughly every 7.5 seconds.
+
+This uses the current development API's shared Basic Auth, not private user accounts.
+Profile IDs are browser-local identifiers, not authentication credentials. Real accounts
+and role-based authorization require backend changes before public use. Pickup and
+destination currently select zone centers; address search and map routing are not
+implemented. Static assets contain no credentials; requests use same-origin `/api/`
+and the gateway's required mutation header.
 
 ## Start locally
 

@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let scheduleLoaded = false, working = false, deferredInstall;
+let scheduleLoaded = false, working = false;
 const date = value => new Date(value).toLocaleString(undefined, {dateStyle:'medium',timeStyle:'short'});
 function node(tag, text, cls) { const el=document.createElement(tag); if(text!==undefined) el.textContent=text; if(cls) el.className=cls; return el; }
 function notice(text) { $('notice').textContent=text; $('notice').hidden=!text; }
@@ -126,8 +126,5 @@ $('schedule-form').onsubmit=async event=>{event.preventDefault();const button=ev
 $('proposal-form').onsubmit=async event=>{event.preventDefault();event.submitter.disabled=true;try{await api('proposals','POST',{zone:$('proposal-zone').value,reason:$('proposal-reason').value});$('proposal-reason').value='';notice('Test proposal created.');await refresh();}catch(error){notice(error.message);}finally{event.submitter.disabled=false;}};
 $('refresh').onclick=()=>{notice('');refresh();};
 window.addEventListener('online',refresh);window.addEventListener('offline',refresh);
-window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstall=event;$('install').hidden=false;});
-$('install').onclick=async()=>{if(deferredInstall){await deferredInstall.prompt();deferredInstall=null;$('install').hidden=true;}};
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 refresh();
 setInterval(()=>{if(!document.hidden&&!working)refresh();},30000);
