@@ -1,54 +1,40 @@
-import { lazy, Suspense } from 'react';
-import { Box, CircularProgress } from '@mui/material';
+import type { ComponentType } from 'react';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import { usePageMetadata } from '../hooks/usePageMetadata';
-const DashboardLayout = lazy(() => import('../layouts/DashboardLayout'));
-const RideLayout = lazy(() => import('../layouts/RideLayout'));
-const OverviewPage = lazy(() => import('../pages/dashboard/OverviewPage'));
-const ReportsPage = lazy(() => import('../pages/dashboard/ReportsPage'));
-const SchedulePage = lazy(() => import('../pages/dashboard/SchedulePage'));
-const ActivityPage = lazy(() => import('../pages/dashboard/ActivityPage'));
-const ProposalsPage = lazy(() => import('../pages/dashboard/ProposalsPage'));
-const PassengerPage = lazy(() => import('../pages/passenger/PassengerPage'));
-const DriverPage = lazy(() => import('../pages/driver/DriverPage'));
-function LoadingBoundary() {
+
+// Router-managed imports expose actual navigation loading to the shared animation.
+const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
+  Component: (await load()).default,
+});
+function RootLayout() {
   usePageMetadata();
-  return (
-    <Suspense
-      fallback={
-        <Box sx={{ p: 5, textAlign: 'center' }}>
-          <CircularProgress aria-label="Loading page" />
-        </Box>
-      }
-    >
-      <Outlet />
-    </Suspense>
-  );
+  return <Outlet />;
 }
 export const router = createBrowserRouter([
   {
-    element: <LoadingBoundary />,
+    element: <RootLayout />,
+    HydrateFallback: () => null,
     children: [
       {
         path: '/ride',
-        element: <RideLayout />,
+        lazy: page(() => import('../layouts/RideLayout')),
         children: [
           { index: true, element: <Navigate to="/ride/passenger" replace /> },
           { path: 'index.html', element: <Navigate to="/ride/passenger" replace /> },
-          { path: 'passenger', element: <PassengerPage /> },
-          { path: 'driver', element: <DriverPage /> },
+          { path: 'passenger', lazy: page(() => import('../pages/passenger/PassengerPage')) },
+          { path: 'driver', lazy: page(() => import('../pages/driver/DriverPage')) },
           { path: '*', element: <Navigate to="/ride/passenger" replace /> },
         ],
       },
       {
         path: '/',
-        element: <DashboardLayout />,
+        lazy: page(() => import('../layouts/DashboardLayout')),
         children: [
-          { index: true, element: <OverviewPage /> },
-          { path: 'reports', element: <ReportsPage /> },
-          { path: 'schedule', element: <SchedulePage /> },
-          { path: 'activity', element: <ActivityPage /> },
-          { path: 'proposals', element: <ProposalsPage /> },
+          { index: true, lazy: page(() => import('../pages/dashboard/OverviewPage')) },
+          { path: 'reports', lazy: page(() => import('../pages/dashboard/ReportsPage')) },
+          { path: 'schedule', lazy: page(() => import('../pages/dashboard/SchedulePage')) },
+          { path: 'activity', lazy: page(() => import('../pages/dashboard/ActivityPage')) },
+          { path: 'proposals', lazy: page(() => import('../pages/dashboard/ProposalsPage')) },
           { path: '*', element: <Navigate to="/" replace /> },
         ],
       },

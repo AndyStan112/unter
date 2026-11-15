@@ -6,7 +6,8 @@ export const brand = {
   blue: '#163EAB',
   ink: '#172444',
   muted: '#64708A',
-  background: '#F7F8FC',
+  background: '#EFF1F8',
+  loadingBackground: '#DCE3F5',
   border: '#E5E8F1',
 };
 

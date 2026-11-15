@@ -1,3 +1,4 @@
+import { useLoadingSignal } from '../hooks/LoadingProvider';
 import { useState } from 'react';
 import {
   Alert,
@@ -37,6 +38,7 @@ function Content() {
   const [open, setOpen] = useState(false);
   const { loading, busy, online, message, clearMessage, refresh } = useDashboard();
   const location = useLocation();
+  useLoadingSignal(loading);
   const sidebar = (
     <Stack sx={{ p: 3, height: '100%', color: 'white', bgcolor: 'secondary.dark' }}>
       <Typography

@@ -1,3 +1,4 @@
+import { useLoadingSignal } from '../hooks/LoadingProvider';
 import {
   Alert,
   Box,
@@ -19,6 +20,7 @@ function Content() {
   const { online, message, busy, loading, clearMessage } = useRide();
   const { available, install } = useInstall();
   const location = useLocation();
+  useLoadingSignal(loading);
   return (
     <Box sx={{ minHeight: '100dvh' }}>
       <Stack
