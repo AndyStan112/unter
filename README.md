@@ -8,7 +8,7 @@ admin website and an installable passenger/driver PWA.
 ## Passenger and driver PWA
 
 Open `/ride/` on the same origin as the gateway (locally, <http://localhost:5180/ride/>).
-The responsive, buildless PWA has passenger and driver modes, with separate profiles
+The responsive React / Material UI PWA has passenger and driver modes, with separate profiles
 remembered in browser local storage. Use two browsers or devices to try both sides:
 create a driver, choose a zone or enable live GPS, go online, then create a passenger
 and request a trip. The driver can accept or decline, confirm pickup and complete;
@@ -17,9 +17,10 @@ open: it polls every 2.5 seconds and sends location roughly every 7.5 seconds.
 
 This uses the current development API's shared Basic Auth, not private user accounts.
 Profile IDs are browser-local identifiers, not authentication credentials. Real accounts
-and role-based authorization require backend changes before public use. Pickup and
-destination currently select zone centers; address search and map routing are not
-implemented. Static assets contain no credentials; requests use same-origin `/api/`
+and role-based authorization require backend changes before public use. Pickup and destination can be selected from zone centers or pinned on the
+interactive Leaflet / OpenStreetMap map. The map follows the driver’s latest position.
+Dotted lines are point connections, not road directions; address search and road
+navigation are not implemented. Static assets contain no credentials; requests use same-origin `/api/`
 and the gateway's required mutation header.
 
 ## Start locally
@@ -65,11 +66,17 @@ billing credit: the first real run verifies paid inference, not just key validit
 
 Use `AGENT_MODE=fake docker compose up -d` to test the real MCP/database integration
 without calling OpenAI. Fake results are explicitly labelled in the dashboard.
-For Python/UI hot reload:
+For Python hot reload (requires Node 22.12+ to build the frontend):
 
 ```sh
+npm ci --prefix frontend
+npm --prefix frontend run build
 docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 ```
+
+For frontend hot reload, run `npm --prefix frontend run dev` and open
+<http://localhost:5173>; API requests proxy to the gateway on port 5180.
+See [frontend/README.md](frontend/README.md) for the theme, routes, map and source layout.
 
 Edit Java sources and run `docker compose up -d --build core` to rebuild that service.
 
@@ -118,7 +125,7 @@ exposed. Limits bound usage; they are not a provider-side dollar budget.
 | mcp | Python / FastMCP | read-only zone analytics tools calling core with the READER login |
 | agent | Python / Agno / FastAPI / croniter | agent database, cron schedule, run history, reports, report outbox |
 | mailer | Python / aio-pika / smtplib | emails each `report.ready` (queue `unter.reports`); records delivery state in the agent database |
-| gateway | Python / FastAPI + buildless JS/CSS dashboard and ride PWA | one browser entry point and auth |
+| gateway | Python / FastAPI + React / Material UI dashboard and ride PWA | one browser entry point and auth |
 | postgres | PostgreSQL 17 | separate core, agent and activity databases/accounts |
 | rabbitmq | RabbitMQ 4 | durable topic exchange, worker queue, mailer queue + retry queue |
 
@@ -129,7 +136,9 @@ Browser mutations require `X-Unter-Request: 1` to prevent cross-origin form atta
 
 ## Checks
 
-Frontend state-machine and worker isolation checks run with `node --test .github/scripts/*.test.cjs`.
+Run `npm ci --prefix frontend`, `npm --prefix frontend run build`, and
+`npm --prefix frontend test` for frontend lifecycle tests. Worker isolation checks run
+with `node --test .github/scripts/*.test.cjs` after the build.
 
 
 ```sh

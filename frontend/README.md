@@ -1,0 +1,38 @@
+# Unter frontend
+
+React + TypeScript + Material UI + React Router. Node 22.12 or newer is required.
+
+```sh
+npm ci
+npm run dev
+npm test
+npm run build
+```
+
+Vite serves the app on port 5173 and proxies `/api` to the gateway on 5180.
+Production is generated in `dist/` and copied into the Python image by its
+multi-stage Dockerfile. For live editing use the Vite development server.
+
+- `src/theme/theme.ts`: palette, typography, spacing defaults, shape and shared MUI overrides.
+- `src/app/router.tsx`: dashboard routes and `/ride/passenger`, `/ride/driver`.
+- `src/pages/`: one page per file, grouped by dashboard/passenger/driver.
+- `src/layouts/`: navigation and responsive application layouts.
+- `src/components/`: reusable UI and the Leaflet map.
+- `src/hooks/`: API polling, serialized mutations, installation and connectivity.
+- `src/services/`: API client, session persistence and display helpers.
+- `src/types/`: API data contracts.
+- `public/`: PWA manifest and icons. Put future imported imagery under `src/assets/`.
+
+Only the ride app is installable. The build creates a versioned worker and precaches
+its local shell and lazy-loaded bundles so passenger/driver routes reload offline.
+API data, dashboard HTML, and map tiles are never service-worker cached.
+
+The map uses Leaflet and standard OpenStreetMap tiles with visible attribution.
+Set `VITE_MAP_TILE_URL` at build time to use another compatible OSM-attributed tile
+server. Production deployments with higher traffic should configure a suitable
+provider. Markers can be selected by tapping the map or by using accessible zone
+fields. Dotted lines connect locations; they are not road routing or navigation.
+Live driver GPS is only sent while this app is open and the driver is online.
+
+The existing shared development Basic Auth and browser-local profiles remain in
+use. No credentials belong in Vite environment variables or browser assets.

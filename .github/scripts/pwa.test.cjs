@@ -16,24 +16,24 @@ function worker(path, names) {
     }};
 }
 test('ride manifest is scoped independently from dashboard',()=>{
-  const manifest=JSON.parse(readFileSync('web/ride/manifest.webmanifest'));
+  const manifest=JSON.parse(readFileSync('frontend/public/ride/manifest.webmanifest'));
   assert.equal(manifest.start_url,'/ride/');assert.equal(manifest.scope,'/ride/');assert.equal(manifest.id,'/ride/');
-  assert(!readFileSync('web/index.html','utf8').includes('rel="manifest"'));
-  assert(!existsSync('web/manifest.webmanifest'));
+  assert(!readFileSync('frontend/index.html','utf8').includes('rel="manifest"'));
+  assert(!existsSync('frontend/public/manifest.webmanifest'));
 });
 test('ride worker bypasses API, POSTs, dashboard, queries and external URLs',()=>{
-  const h=worker('web/ride/sw.js',[]);
+  const h=worker('frontend/dist/ride/sw.js',[]);
   for(const [path,method]of [['/api/trips','GET'],['/ride/','POST'],['/','GET'],['/app.js','GET'],['/ride/?secret=1','GET'],['https://other.test/ride/','GET']]){
     assert.equal(h.fetch(path,method),0,`${method} ${path}`);
   }
 });
 test('retirement removes only old dashboard caches and unregisters itself',async()=>{
-  const h=worker('web/sw.js',['unter-shell-v1','unter-shell-v2','unter-ride-shell-v1','other-app']);
+  const h=worker('frontend/public/sw.js',['unter-shell-v1','unter-shell-v2','unter-ride-shell-v1','other-app']);
   let task;h.events.activate({waitUntil:value=>task=value});await task;
   assert.deepEqual(h.deleted,['unter-shell-v1','unter-shell-v2']);assert(h.unregistered);
 });
 test('ride activation preserves other application caches',async()=>{
-  const h=worker('web/ride/sw.js',['unter-ride-shell-v0','unter-ride-shell-v1','other-app']);
+  const h=worker('frontend/dist/ride/sw.js',['unter-ride-shell-v0','other-app']);
   let task;h.events.activate({waitUntil:value=>task=value});await task;
   assert.deepEqual(h.deleted,['unter-ride-shell-v0']);assert(!h.unregistered);
 });

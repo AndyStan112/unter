@@ -92,8 +92,8 @@ function Content() {
       </List>
       <Box sx={{ mt: 'auto', pt: 4 }}>
         <Button
-          component={Link}
-          to="/ride/"
+          component="a"
+          href="/ride/"
           fullWidth
           endIcon={<ArrowOutwardRounded />}
           sx={{ color: '#fff', border: '1px solid rgba(255,255,255,.3)' }}

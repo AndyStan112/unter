@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
+import { usePageMetadata } from '../hooks/usePageMetadata';
 const DashboardLayout = lazy(() => import('../layouts/DashboardLayout'));
 const RideLayout = lazy(() => import('../layouts/RideLayout'));
 const OverviewPage = lazy(() => import('../pages/dashboard/OverviewPage'));
@@ -11,6 +12,7 @@ const ProposalsPage = lazy(() => import('../pages/dashboard/ProposalsPage'));
 const PassengerPage = lazy(() => import('../pages/passenger/PassengerPage'));
 const DriverPage = lazy(() => import('../pages/driver/DriverPage'));
 function LoadingBoundary() {
+  usePageMetadata();
   return (
     <Suspense
       fallback={

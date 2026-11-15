@@ -39,7 +39,10 @@ function Content() {
             sx={{ fontWeight: 900, fontSize: 32, letterSpacing: '-.07em', lineHeight: 1 }}
             color="primary"
           >
-            unter<span style={{ color: 'var(--mui-palette-secondary-main, #163EAB)' }}>.</span>
+            unter
+            <Box component="span" color="secondary.main">
+              .
+            </Box>
           </Typography>
           <Typography variant="overline" sx={{ fontSize: 9 }}>
             Ride & drive

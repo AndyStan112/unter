@@ -17,10 +17,11 @@ const assets = (await files(root.pathname))
   .filter((path) => path.startsWith('assets/'))
   .map((path) => `/${path}`);
 const html = await readFile(new URL('ride/index.html', root), 'utf8');
-const version = createHash('sha256')
-  .update(html + assets.join('|'))
-  .digest('hex')
-  .slice(0, 12);
+const hash = createHash('sha256').update(html + assets.join('|'));
+for (const file of ['ride/manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png']) {
+  hash.update(await readFile(new URL(file, root)));
+}
+const version = hash.digest('hex').slice(0, 12);
 const template = await readFile(new URL('../src/app/service-worker.js', import.meta.url), 'utf8');
 const worker = template
   .replace('__CACHE_VERSION__', version)

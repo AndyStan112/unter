@@ -5,8 +5,8 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from .auth import BasicAuth, basic_header
+from .frontend import FrontendFiles
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 # Static assets contain no private data; only /ride/ is an installable offline shell.
@@ -153,5 +153,5 @@ async def mcp_proxy(request: Request):
 
 web = Path(os.getenv('WEB_ROOT', '/app/web'))
 if not web.exists():
-    web = Path(__file__).resolve().parents[3] / 'web'
-app.mount('/', StaticFiles(directory=web, html=True), name='web')
+    web = Path(__file__).resolve().parents[3] / 'frontend' / 'dist'
+app.mount('/', FrontendFiles(directory=web, html=True), name='web')
