@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .auth import BasicAuth, basic_header
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-# The static shell contains no private data and can be installed/offline cached.
+# Static assets contain no private data; only /ride/ is an installable offline shell.
 # All application data and actions require this one administrator login.
 
 

@@ -11,6 +11,9 @@ test:
 	node --test .github/scripts/*.test.cjs
 	node --check web/app.js
 	node --check web/sw.js
+	node --check web/retire-dashboard-worker.js
+	node --check web/ride/ride.js
+	node --check web/ride/sw.js
 integration:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/integration.py
 migrations-check:

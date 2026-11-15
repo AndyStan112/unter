@@ -23,7 +23,7 @@ jobs:
         with: {version: '0.10.12', python-version: '3.12'}
       - run: uv sync --project services/python --frozen
       - run: uv run --project services/python pytest services/python/tests -q
-      - run: node --check web/app.js && node --check web/sw.js
+      - run: node --check web/app.js && node --check web/sw.js && node --check web/retire-dashboard-worker.js && node --check web/ride/ride.js && node --check web/ride/sw.js
       - run: node --test .github/scripts/*.test.cjs
       - run: uv run --project services/python python scripts/scan-secrets.py
       - run: uv run --project services/python python scripts/init-env.py

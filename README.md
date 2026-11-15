@@ -3,12 +3,12 @@
 A deliberately small distributed application: seeded PostgreSQL rows, a Java API,
 RabbitMQ events, a Python worker and read-only MCP server, an Agno agent that proposes
 surge rates and driver incentives in a report, and an
-installable admin PWA and a shared passenger/driver web app.
+admin website and an installable passenger/driver PWA.
 
-## Passenger and driver frontend
+## Passenger and driver PWA
 
 Open `/ride/` on the same origin as the gateway (locally, <http://localhost:5180/ride/>).
-The responsive, buildless app has passenger and driver modes, with separate profiles
+The responsive, buildless PWA has passenger and driver modes, with separate profiles
 remembered in browser local storage. Use two browsers or devices to try both sides:
 create a driver, choose a zone or enable live GPS, go online, then create a passenger
 and request a trip. The driver can accept or decline, confirm pickup and complete;
@@ -45,11 +45,12 @@ uv run --project services/python python scripts/init-env.py
 docker compose up -d --build
 ```
 
-Open <http://localhost:5180>. The data requests ask for the `ADMIN_USERNAME` and
+Open <http://localhost:5180> for the dashboard or <http://localhost:5180/ride/> for the PWA. The data requests ask for the `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` from `.env` once; the browser reuses Basic Auth on this origin.
-Static PWA assets are public and contain no application data or credentials.
-All data, administration and MCP access require authentication. The PWA only
-caches static assets and shows an offline notice when live requests are unavailable.
+Static web assets are public and contain no application data or credentials.
+All data, administration and MCP access require authentication. Only `/ride/` is installable and caches its static shell. Ride actions require a
+connection; last-known status is labelled offline. The dashboard has no manifest or
+active service worker. Existing dashboard workers retire on the next online visit.
 
 `.env` is the local source for credentials. `init-env.py` fills missing passwords,
 preserves existing values, and restricts permissions to the owner. Compose loads
@@ -117,16 +118,19 @@ exposed. Limits bound usage; they are not a provider-side dollar budget.
 | mcp | Python / FastMCP | read-only zone analytics tools calling core with the READER login |
 | agent | Python / Agno / FastAPI / croniter | agent database, cron schedule, run history, reports, report outbox |
 | mailer | Python / aio-pika / smtplib | emails each `report.ready` (queue `unter.reports`); records delivery state in the agent database |
-| gateway | Python / FastAPI + buildless JS/CSS PWA | one browser entry point and auth |
+| gateway | Python / FastAPI + buildless JS/CSS dashboard and ride PWA | one browser entry point and auth |
 | postgres | PostgreSQL 17 | separate core, agent and activity databases/accounts |
 | rabbitmq | RabbitMQ 4 | durable topic exchange, worker queue, mailer queue + retry queue |
 
-Public routes: `/` (static PWA), `/api/*` (admin Basic Auth), `/mcp` (admin Basic
+Public routes: `/` (dashboard), `/ride/` (PWA), `/api/*` (admin Basic Auth), `/mcp` (admin Basic
 Auth), `/healthz` (no application data). Internal services use automatically supplied
 service Basic Auth. The Java OpenAPI document is available through `/api/openapi`.
 Browser mutations require `X-Unter-Request: 1` to prevent cross-origin form attacks.
 
 ## Checks
+
+Frontend state-machine and worker isolation checks run with `node --test .github/scripts/*.test.cjs`.
+
 
 ```sh
 uv run --project services/python pytest services/python/tests -q
