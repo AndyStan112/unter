@@ -6,3 +6,6 @@
 **/.pytest_cache
 **/target
 .local
+**/node_modules
+frontend/dist
+*.tsbuildinfo
