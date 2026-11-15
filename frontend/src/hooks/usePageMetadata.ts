@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router';
 import theme from '../theme/theme';
+import { buildAsset } from '../services/buildAsset';
 
 export function usePageMetadata() {
   const { pathname } = useLocation();
@@ -13,7 +14,7 @@ export function usePageMetadata() {
     if (ride && !manifest) {
       manifest = document.createElement('link');
       manifest.rel = 'manifest';
-      manifest.href = '/ride/manifest.webmanifest';
+      manifest.href = buildAsset('/ride/manifest.webmanifest');
       document.head.append(manifest);
     } else if (!ride) manifest?.remove();
   }, [pathname]);

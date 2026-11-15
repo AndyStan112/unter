@@ -25,12 +25,14 @@ self.addEventListener('activate', (event) => {
 });
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.search) return;
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   // API data, dashboard HTML and external map tiles never enter this cache.
+  const asset = url.pathname + url.search;
   const navigation =
+    !url.search &&
     event.request.mode === 'navigate' &&
     ['/ride/', '/ride/index.html', '/ride/passenger', '/ride/driver'].includes(url.pathname);
-  if (!navigation && !ASSETS.includes(url.pathname)) return;
+  if (!navigation && !ASSETS.includes(asset)) return;
   if (!navigation) {
     // Content-hashed assets are immutable; static icons/manifest stay network-first.
     if (url.pathname.startsWith('/assets/')) {
@@ -43,7 +45,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok && ASSETS.includes(url.pathname)) {
+        if (response.ok && ASSETS.includes(asset)) {
           const copy = response.clone();
           event.waitUntil(caches.open(CACHE).then((cache) => cache.put(event.request, copy)));
         }

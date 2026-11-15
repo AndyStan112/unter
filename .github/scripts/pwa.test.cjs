@@ -37,3 +37,14 @@ test('ride activation preserves other application caches',async()=>{
   let task;h.events.activate({waitUntil:value=>task=value});await task;
   assert.deepEqual(h.deleted,['unter-ride-shell-v0']);assert(!h.unregistered);
 });
+
+test('generated PWA entry and icons use the same CDN-safe version',()=>{
+  const html=readFileSync('frontend/dist/ride/index.html','utf8');
+  const version=html.match(/manifest\.webmanifest\?v=([a-f0-9]+)/)?.[1];
+  assert(version,'ride manifest must bypass stale CDN entries');
+  const manifest=JSON.parse(readFileSync('frontend/dist/ride/manifest.webmanifest','utf8'));
+  for(const icon of manifest.icons)assert(icon.src.endsWith(`?v=${version}`));
+  const worker=readFileSync('frontend/dist/ride/sw.js','utf8');
+  assert(worker.includes(`/ride/manifest.webmanifest?v=${version}`));
+  assert(worker.includes(`/icon-192.png?v=${version}`));
+});

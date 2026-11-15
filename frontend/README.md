@@ -36,3 +36,8 @@ Live driver GPS is only sent while this app is open and the driver is online.
 
 The existing shared development Basic Auth and browser-local profiles remain in
 use. No credentials belong in Vite environment variables or browser assets.
+
+PWA URLs include a deterministic build version so a CDN retaining old `.js`,
+manifest or icon responses cannot pin the app to an earlier shell. The generated
+worker caches only those explicit public URLs and hashed bundles; arbitrary query
+strings and API requests still bypass it.
