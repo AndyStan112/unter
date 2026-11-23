@@ -27,8 +27,11 @@
 1. The rider requests a trip. `core` looks for the **nearest AVAILABLE driver whose position was updated in the last 2 minutes** and offers them the trip.
 2. The driver has **30 seconds** to accept. If they reject, don't answer, or go offline, the trip is offered to the next nearest driver. A driver is never offered the same trip twice.
 3. If no driver takes the trip within **2 minutes**, it becomes `UNMATCHED`.
-4. On accept, the price is fixed: **(5.00 RON + 2.50 RON per straight-line km) × the pickup zone's surge** (1.0 without surge).
-5. The driver picks up, then completes the trip, and is `AVAILABLE` again.
+4. On accept, the price is fixed: **(5.00 RON + 2.50 RON per booked road km, with a labelled straight-line fallback when routing is unavailable) × the pickup zone's surge** (1.0 without surge).
+5. At acceptance, core also snapshots the newest active pickup-zone incentive. The passenger fare excludes it.
+6. The driver picks up, then completes the trip, and is `AVAILABLE` again. Completion atomically records
+   the fare + locked bonus in `driver_earnings` with `payment_status=mock_settled`. Repeated completion
+   by that driver returns the completed trip and does not credit it again. No real money moves.
 
 A rider can have only one open trip at a time.
 
@@ -77,6 +80,7 @@ A rider can have only one open trip at a time.
 | `POST /drivers/{id}/online` | | Driver. Already online or busy: no change |
 | `POST /drivers/{id}/offline` | | Driver. A pending offer is handed back. `409 driver_busy` during a trip |
 | `POST /drivers/{id}/location` | `{"lat", "lon"}` | `204`. Send every 5–10 s while online: without it the driver gets no offers |
+| `GET /drivers/{id}/earnings` | | Mock balance, fares, bonuses, today (Bucharest), completed count and last 50 settlements |
 | `GET /drivers/{id}/offer` | | `{"offer", "trip", "estimated_price"}`, or `204` if none. Poll every 2–3 s |
 | `POST /offers/{id}/accept` | `{"driver_id"}` | `{"offer", "trip"}` (trip `ASSIGNED`, price fixed) |
 | `POST /offers/{id}/reject` | `{"driver_id"}` | Offer |
@@ -87,7 +91,8 @@ A rider can have only one open trip at a time.
 | Call | Body | Returns |
 |---|---|---|
 | `POST /riders` | `{"name"}` | `201` the new Rider |
-| `POST /trips` | `{"rider_id", "pickup", "dropoff"}` | `201` Trip: already `OFFERED` if a driver was free, otherwise `REQUESTED` |
+| `POST /ride-plan` | `{"pickup", "dropoff"}` | Road geometry, distance, duration, steps, estimated fare, surge and mock payment mode; explicit fallback warning when unavailable |
+| `POST /trips` | `{"rider_id", "pickup", "dropoff", "pickup_label"?, "dropoff_label"?}` | `201` Trip: already `OFFERED` if a driver was free, otherwise `REQUESTED` |
 | `GET /trips/{id}` | | Trip. Poll every 2–3 s to follow progress |
 | `GET /drivers/{id}` | | Driver, including position, to show the driver approaching |
 | `POST /trips/{id}/cancel` | `{"rider_id"}` | Trip. Allowed until pickup |
@@ -98,10 +103,11 @@ A rider can have only one open trip at a time.
 |---|---|---|
 | `GET /zones` | | list of Zone |
 | `GET /drivers?status=` | | list of Driver (`status` optional) |
-| `GET /trips?status=&zone=&limit=` | | list of Trip, newest first (`limit` 1–200, default 50) |
+| `GET /trips?status=&zone=&limit=&riderId=&driverId=` | | list of Trip, newest first (`limit` 1–200, default 50) |
 | `GET /surge` · `GET /incentives` | | what applies right now: at most one per zone, the newest active one |
 | `GET /proposals` | | the 50 newest Proposals |
 | `POST /proposals` | `{"zone", "reason", "type", "params"}` | Proposal (`pending`) |
+| `POST /report-approvals` | `{"report_id", "proposal_id", "proposal": {"zone", "type", "params", "reason"}, "existing_proposal_id"?}` | Atomically creates and approves one proposal per source key; replay returns the same result; changed values conflict |
 | `PATCH /proposals/{id}` | `{"status": "approved" \| "rejected"}` | Proposal. Approving a surge or incentive creates the rule straight away |
 | `GET /observations` | | as today. **Deprecated**: kept until the stats worker replaces it |
 | `GET /stats/zones?from=&to=&bucket=&zone=` | | Trip, wait and offer figures per zone and time bucket (below) |
@@ -122,6 +128,23 @@ A rider can have only one open trip at a time.
 - `incentive`: `params` = `{"bonus_per_trip": 0–20, "starts_at", "ends_at"}`.
 - Amounts have at most 2 decimals, and `ends_at` must be after `starts_at` and in the future.
 - The incentive is a bonus for drivers: it doesn't change the rider's price.
+
+## Gateway and notification additions
+
+- `GET /api/places?q=` performs explicit Photon address search (3–200 characters), returning up to five
+  `{lat,lon,label}` choices. Cached for 24 hours, at most one uncached query per second per gateway;
+  `429` asks the user to wait, `503` leaves map selection usable.
+- `GET /api/push-key` returns the worker's public VAPID key.
+- `POST /api/push-subscriptions` accepts `{role,profile_id,subscription}` and upserts a browser's
+  subscription. `POST /api/push-unsubscribe` accepts `{endpoint}`. All require admin auth and the
+  mutation header. Endpoints are restricted to supported public browser push providers.
+- `GET /pending-decisions` is an internal agent endpoint used by the gateway recovery loop; it is
+  not proxied to browsers. Approval intent cannot be changed to rejection. Transient failures remain
+  `applying`; definite core refusals become `failed` with an operator retry action. The agent has no
+  route to core and never sends the approval itself.
+- Trip JSON now also includes `driver_bonus`, `incentive_id`, `distance_meters`, `duration_seconds`,
+  `distance_source`, `pickup_label`, and `dropoff_label`. Fare is locked on acceptance using the
+  distance stored at booking. Historic trips can have null distance/duration.
 
 ## Events (RabbitMQ)
 

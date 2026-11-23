@@ -1,0 +1,21 @@
+# Isolated deterministic providers; use only with compose.yaml for integration checks.
+services:
+  routing-fixture:
+    image: ${UNTER_PYTHON_IMAGE:-unter-python:dev}
+    command: [python, /fixture.py]
+    volumes:
+      - ./services/python/tests/fixtures/ride_provider.py:/fixture.py:ro,z
+  core:
+    environment:
+      ROUTING_URL: http://routing-fixture:8000
+    depends_on:
+      routing-fixture: {condition: service_started}
+  gateway:
+    environment:
+      GEOCODING_URL: http://routing-fixture:8000
+  mailer:
+    environment:
+      # Never inherit a real SMTP service from the developer's .env during tests.
+      SMTP_HOST: ''
+      SMTP_USER: ''
+      SMTP_PASSWORD: ''

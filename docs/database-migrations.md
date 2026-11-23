@@ -78,9 +78,15 @@ Current Alembic revisions:
 | agent | `agent_0002` | `report_settings` (one row), `reports`, `agent_outbox` |
 | agent | `agent_0003` | `report_deliveries` (written by the mailer, which uses the agent login) |
 | agent | `agent_0004` | `report_decisions` (approve/reject per reported proposal) |
+| agent | `agent_0005` | approval recovery failure state and error details |
+| activity | `activity_0002` | VAPID identity, subscriptions and push delivery queue |
 | activity | `activity_0001` | `activity` (adopts the original table) |
 
-All later revisions only add tables, so an older agent image keeps working against them.
+Core V8 adds durable report source keys; V9 adds the incentive snapshot and immutable earnings ledger;
+V10 stores booked road distance, duration and optional address labels. V9 backfills previously completed
+trips with their existing fare and zero bonus. It does not invent historical incentive eligibility.
+Later Python revisions add tables or compatible columns/check values. Upgrade all services together
+before enabling new workflows; an old gateway must not process new recoverable approval states.
 
 The initial Alembic revisions are `agent_0001` and `activity_0001`. For an empty
 database they create the tables. For an existing unversioned database, they verify

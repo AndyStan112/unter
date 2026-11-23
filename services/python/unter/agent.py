@@ -213,7 +213,7 @@ def reports():
                           "CASE WHEN d.report_id IS NOT NULL THEN json_build_object('status', d.status, 'attempts', d.attempts, "
                           "'last_error', d.last_error, 'updated_at', d.updated_at, 'sent_at', d.sent_at) END AS delivery, "
                           "coalesce((SELECT json_object_agg(x.proposal_id, json_build_object('status', x.status, "
-                          "'core_proposal_id', x.core_proposal_id, 'decided_at', x.decided_at)) "
+                          "'core_proposal_id', x.core_proposal_id, 'error', x.error, 'decided_at', x.decided_at)) "
                           "FROM report_decisions x WHERE x.report_id = r.id), '{}'::json) AS decisions "
                           'FROM reports r LEFT JOIN report_deliveries d ON d.report_id = r.id '
                           'ORDER BY r.created_at DESC LIMIT 20').fetchall()
@@ -221,7 +221,6 @@ def reports():
 
 # Decisions on reported proposals. Called only by the gateway (not forwarded from the browser), which
 # applies an approval in core under the operator's request. The agent itself never calls core.
-STALE_CLAIM = timedelta(minutes=2)
 
 
 class DecisionClaim(BaseModel):
@@ -233,52 +232,63 @@ class DecisionClaim(BaseModel):
 class DecisionResult(BaseModel):
     report_id: uuid.UUID
     proposal_id: str = Field(min_length=3, max_length=100)
-    status: Literal['applied', 'created']
-    core_proposal_id: uuid.UUID
+    status: Literal['applied', 'created', 'failed']
+    core_proposal_id: uuid.UUID | None = None
+    error: str | None = Field(default=None, max_length=500)
 
 
 @app.post('/decisions')
 def claim_decision(claim: DecisionClaim):
-    """Claims one proposal of a stored report and returns it exactly as reported, numbers included.
+    """Persist the operator's intent. An approval intent is retriable, never changed to rejection.
 
-    409 if it was already decided (or is being applied) or, for an approval, if its window is over.
-    An 'applying' claim older than two minutes (the gateway died midway) can be claimed again.
+    Core owns idempotent application; the agent only records bookkeeping and never calls core.
     """
     with connect() as db:
-        row = db.execute('SELECT report FROM reports WHERE id=%s', (claim.report_id,)).fetchone()
+        # Serialize decisions for a report without a lease that can expire mid-request.
+        row = db.execute('SELECT report FROM reports WHERE id=%s FOR UPDATE', (claim.report_id,)).fetchone()
         proposal = next((p for p in (row or {}).get('report', {}).get('proposals', []) if p['id'] == claim.proposal_id), None)
         if proposal is None:
             raise HTTPException(404, 'This report has no such proposal')
+        previous = db.execute('SELECT * FROM report_decisions WHERE report_id=%s AND proposal_id=%s',
+                              (claim.report_id, claim.proposal_id)).fetchone()
+        if previous:
+            if claim.decision == 'approved' and previous['status'] in ('applying', 'created', 'applied', 'failed'):
+                if previous['status'] != 'applied':
+                    db.execute("UPDATE report_decisions SET status='applying', decided_at=now(), error=NULL WHERE report_id=%s AND proposal_id=%s",
+                               (claim.report_id, claim.proposal_id))
+                return {'status': previous['status'], 'proposal': proposal,
+                        'core_proposal_id': str(previous['core_proposal_id']) if previous['core_proposal_id'] else None}
+            if claim.decision == 'rejected' and previous['status'] == 'rejected':
+                return {'status': 'rejected', 'proposal': proposal}
+            raise HTTPException(409, 'This proposal already has a different decision')
         if claim.decision == 'approved' and datetime.fromisoformat(proposal['params']['ends_at']) <= datetime.now(UTC):
             raise HTTPException(409, 'This proposal has expired: its time window is over')
         status = 'applying' if claim.decision == 'approved' else 'rejected'
-        claimed = db.execute("""INSERT INTO report_decisions (report_id, proposal_id, status) VALUES (%s, %s, %s)
-                                ON CONFLICT (report_id, proposal_id) DO UPDATE SET status = EXCLUDED.status, decided_at = now()
-                                WHERE report_decisions.status = 'applying' AND report_decisions.decided_at < now() - %s
-                                RETURNING status""", (claim.report_id, claim.proposal_id, status, STALE_CLAIM)).fetchone()
-        if claimed is None:
-            raise HTTPException(409, 'This proposal has already been decided')
+        db.execute('INSERT INTO report_decisions(report_id,proposal_id,status) VALUES (%s,%s,%s)',
+                   (claim.report_id, claim.proposal_id, status))
     return {'status': status, 'proposal': proposal}
 
 
 @app.put('/decisions')
 def complete_decision(result: DecisionResult):
+    if result.status != 'failed' and result.core_proposal_id is None:
+        raise HTTPException(422, 'A successful application needs a core proposal ID')
     with connect() as db:
-        row = db.execute("UPDATE report_decisions SET status=%s, core_proposal_id=%s, decided_at=now() "
-                         "WHERE report_id=%s AND proposal_id=%s AND status='applying' RETURNING status",
-                         (result.status, result.core_proposal_id, result.report_id, result.proposal_id)).fetchone()
+        row = db.execute("""UPDATE report_decisions SET status=%s, core_proposal_id=coalesce(%s,core_proposal_id), error=%s, decided_at=now()
+                            WHERE report_id=%s AND proposal_id=%s AND status IN ('applying','created','applied','failed')
+                              AND (%s::uuid IS NULL OR core_proposal_id IS NULL OR core_proposal_id=%s)
+                              AND (status != 'applied' OR %s = 'applied') RETURNING status""",
+                         (result.status, result.core_proposal_id, result.error, result.report_id, result.proposal_id,
+                          result.core_proposal_id, result.core_proposal_id, result.status)).fetchone()
     if row is None:
-        raise HTTPException(409, 'No approval in progress for this proposal')
-    return {'status': result.status, 'core_proposal_id': str(result.core_proposal_id)}
+        raise HTTPException(409, 'No matching approval in progress for this proposal')
+    return {'status': result.status, 'core_proposal_id': str(result.core_proposal_id) if result.core_proposal_id else None}
 
 
-@app.delete('/decisions')
-def release_decision(report_id: uuid.UUID, proposal_id: str):
-    """Undoes a claim when core refused the proposal, so the operator can try again."""
+@app.get('/pending-decisions')
+def pending_decisions():
     with connect() as db:
-        db.execute("DELETE FROM report_decisions WHERE report_id=%s AND proposal_id=%s AND status='applying'",
-                   (report_id, proposal_id))
-    return {'released': True}
+        return db.execute("SELECT report_id,proposal_id FROM report_decisions WHERE status IN ('applying','created') ORDER BY decided_at LIMIT 50").fetchall()
 
 
 @app.post('/run')

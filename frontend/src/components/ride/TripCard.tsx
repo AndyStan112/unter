@@ -39,7 +39,8 @@ export function TripCard({ role }: { role: Role }) {
             {incoming ? 'A passenger needs a ride' : tripLabel(trip, role)}
           </Typography>
           <Typography color="text.secondary">
-            {pointLabel(trip.pickup, zones)} → {pointLabel(trip.dropoff, zones)}
+            {trip.pickup_label || pointLabel(trip.pickup, zones)} →{' '}
+            {trip.dropoff_label || pointLabel(trip.dropoff, zones)}
           </Typography>
           <Typography variant="h4">
             {price == null
@@ -50,6 +51,24 @@ export function TripCard({ role }: { role: Role }) {
             <Typography variant="body2">Your driver · {assignedDriver.name}</Typography>
           )}
           <Divider />
+          {trip.distance_source === 'straight_line' && (
+            <Typography variant="body2" color="text.secondary">
+              Fare uses the booked straight-line distance because road routing was unavailable.
+            </Typography>
+          )}
+          {role === 'driver' && !incoming && Number(trip.driver_bonus || 0) > 0 && (
+            <Typography color="secondary.main">
+              Driver bonus: {Number(trip.driver_bonus).toFixed(2)} RON · locked at acceptance
+            </Typography>
+          )}
+          {trip.status === 'COMPLETED' && (
+            <Typography color="secondary.main">
+              Mock payment settled
+              {role === 'driver'
+                ? ` · earned ${(Number(trip.price || 0) + Number(trip.driver_bonus || 0)).toFixed(2)} RON including bonus`
+                : ''}
+            </Typography>
+          )}
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {incoming ? (
               <>

@@ -17,11 +17,49 @@ open: it polls every 2.5 seconds and sends location roughly every 7.5 seconds.
 
 This uses the current development API's shared Basic Auth, not private user accounts.
 Profile IDs are browser-local identifiers, not authentication credentials. Real accounts
-and role-based authorization require backend changes before public use. Pickup and destination can be selected from zone centers or pinned on the
-interactive Leaflet / OpenStreetMap map. The map follows the driver’s latest position.
-Dotted lines are point connections, not road directions; address search and road
-navigation are not implemented. Static assets contain no credentials; requests use same-origin `/api/`
+and role-based authorization require backend changes before public use. Pickup and destination can be searched by address, selected from zone centers or pinned on the
+interactive Leaflet / OpenStreetMap map. Road routes show distance, estimated travel time and
+step-by-step directions; drivers can open live navigation. Pickup ETAs use fresh driver positions.
+Estimates exclude live traffic. When routing is unavailable, dashed straight-line connections
+are labelled and ETA is unavailable. Static assets contain no credentials; requests use same-origin `/api/`
 and the gateway's required mutation header.
+
+## Mock earnings and payments
+
+Drivers see an all-time mock balance, today's earnings (Europe/Bucharest), completed ride count,
+fare/bonus totals and their last 50 settlements. Earnings are the full fare plus the newest
+incentive active in the pickup zone at acceptance; the bonus is locked then and is not deducted
+from the passenger fare. Completion settles both once in the same transaction, even if retried.
+Cancellation and unmatched requests earn nothing. No real charges, withdrawals or transfers occur.
+Passenger and driver history survives reloads; profiles still live in browser storage.
+Existing completed rides are backfilled with their stored fare and zero historical bonus.
+
+Report approval is atomic in core under a permanent `(report_id, proposal_id)` key. Replays return
+the same proposal, including after expiration. The gateway reconciles interrupted approvals every
+15 seconds; failures are visible with a retry action. Existing partial approvals are adopted when
+unambiguous. The agent never calls core or applies its own proposals.
+
+## Maps, location and notifications
+
+`ROUTING_URL` selects an OSRM-compatible backend (default `https://router.project-osrm.org`);
+`GEOCODING_URL` selects Photon (default `https://photon.komoot.io`). Address searches are explicit,
+throttled and cached, biased towards Timișoara. Routes have bounded caches and timeouts; moving
+driver routes refresh at most every 10 seconds. Public demo providers have no availability guarantee;
+configure your own providers for significant traffic. Search/route coordinates go to those providers.
+See [Photon](https://photon.komoot.io/) and [OSRM](https://project-osrm.org/docs/v5.24.0/api/).
+
+Enable notifications separately for the profile receiving alerts on a device. Web Push delivers
+ride offers and passenger status updates through the PWA service worker, including while the app
+is closed. It requires HTTPS (or localhost), browser permission, and installation on iPhone.
+The activity database persists the VAPID identity, subscriptions and deduplicated retry queue;
+no third-party API key is needed. Keep that database backed up: replacing the identity requires
+resubscribing devices. Invalid subscriptions are removed, expired offers are not displayed, and
+notification payloads contain no credentials or detailed trip data. Delivery remains best-effort;
+phone/browser policies can delay notifications.
+
+Live GPS requires the app to remain active. Drivers can request screen wake lock; phones may still
+suspend background GPS. Stale positions are shown and dispatch excludes drivers without a location
+updated within two minutes. True continuous background tracking requires a native app.
 
 ## Start locally
 
@@ -161,6 +199,19 @@ stored report, `report.ready` delivery, the mailer's delivery record, report dec
 the cooldown. It creates a rejected test proposal, a run and a report. Run it against a
 fresh local stack with scheduling disabled. It never prints credentials or model
 responses. To test real inference, start the stack with `AGENT_MODE=live` instead.
+
+For deterministic map providers during integration checks:
+
+```sh
+COMPOSE_FILE=compose.yaml:compose.test.yaml AGENT_MODE=fake docker compose up -d --build
+COMPOSE_FILE=compose.yaml:compose.test.yaml make ride-check
+BROWSER=chromium-browser uv run --project services/python python scripts/ride-browser-check.py
+```
+
+These checks create profiles, trips, reports and rules. Use an isolated stack with scheduling
+disabled and other drivers offline. `compose.test.yaml` is test-only and is never deployed.
+The browser check exercises address selection, estimated fare, road guidance, the full ride lifecycle,
+mock earnings/history, mobile layout, reload recovery and service-worker cache isolation.
 
 ## Concurrent market simulation
 

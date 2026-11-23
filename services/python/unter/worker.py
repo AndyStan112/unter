@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from .auth import BasicAuth
 from .common import connect
 from .migrate import upgrade_database
+from . import push
 
 ready = False
 
@@ -30,8 +31,10 @@ async def consume():
                         async with message.process(requeue=True):
                             event = json.loads(message.body)
                             with connect() as db:
-                                db.execute('INSERT INTO activity(id, kind, payload) VALUES (%s,%s,%s::jsonb) ON CONFLICT DO NOTHING',
-                                           (event['id'], event['kind'], json.dumps(event['data'])))
+                                inserted = db.execute('INSERT INTO activity(id, kind, payload) VALUES (%s,%s,%s::jsonb) ON CONFLICT DO NOTHING RETURNING id',
+                                           (event['id'], event['kind'], json.dumps(event['data']))).fetchone()
+                                if inserted:
+                                    push.enqueue(db, event)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -43,12 +46,15 @@ async def consume():
 async def lifespan(app):
     upgrade_database('activity')
     task = asyncio.create_task(consume())
+    notifications = asyncio.create_task(push.sender())
     yield
     task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    notifications.cancel()
+    await asyncio.gather(task, notifications, return_exceptions=True)
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(BasicAuth)
+app.include_router(push.router)
 
 
 @app.get('/healthz')

@@ -5,7 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import win.windogs.unter.Zones.Position;
 
-/** Fare = (5.00 RON + 2.50 RON per straight-line km) × the pickup zone's surge multiplier. */
+/** Fare = (5.00 RON + 2.50 RON per booked road km (straight-line fallback when unavailable)) × the pickup zone's surge multiplier. */
 @Component
 public class Pricing {
     static final BigDecimal BASE=new BigDecimal("5.00"), PER_KM=new BigDecimal("2.50"), NO_SURGE=new BigDecimal("1.00");
@@ -19,6 +19,9 @@ public class Pricing {
     }
     public BigDecimal price(Position pickup, Position dropoff, BigDecimal surge) {
         BigDecimal km=BigDecimal.valueOf(Zones.distanceKm(pickup.lat(),pickup.lon(),dropoff.lat(),dropoff.lon()));
-        return BASE.add(PER_KM.multiply(km)).multiply(surge).setScale(2,RoundingMode.HALF_UP);
+        return price(km.doubleValue()*1000,surge);
+    }
+    public BigDecimal price(double distanceMeters, BigDecimal surge) {
+        return BASE.add(PER_KM.multiply(BigDecimal.valueOf(distanceMeters/1000))).multiply(surge).setScale(2,RoundingMode.HALF_UP);
     }
 }

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Alert, Box, Stack, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, Stack, Typography, useTheme } from '@mui/material';
+import { useRidePlan } from '../../hooks/useRidePlan';
 import type { Point } from '../../types/ride';
 
 interface Props {
+  pickedUp?: boolean;
   pickup?: Point | null;
   dropoff?: Point | null;
   driver?: Point | null;
@@ -13,13 +15,24 @@ interface Props {
 }
 const center: L.LatLngTuple = [45.7537, 21.2257];
 const latLng = (p: Point): L.LatLngTuple => [p.lat, p.lon];
-export function RideMap({ pickup, dropoff, driver, onSelect, instruction }: Props) {
+export function RideMap({
+  pickup,
+  dropoff,
+  driver,
+  onSelect,
+  instruction,
+  pickedUp = false,
+}: Props) {
   const element = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null);
   const selection = useRef(onSelect),
     layers = useRef<L.LayerGroup | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const theme = useTheme();
+  const journey = useRidePlan(pickup, dropoff);
+  const target = pickedUp ? dropoff : pickup;
+  const approach = useRidePlan(driver, target, true);
+  const guidance = approach.plan?.route || journey.plan?.route;
   selection.current = onSelect;
   const framing = useRef('');
   useEffect(() => {
@@ -71,16 +84,16 @@ export function RideMap({ pickup, dropoff, driver, onSelect, instruction }: Prop
           .addTo(group);
     });
     if (pickup && dropoff)
-      L.polyline([latLng(pickup), latLng(dropoff)], {
+      L.polyline(journey.plan?.route.geometry.map(latLng) || [latLng(pickup), latLng(dropoff)], {
         color: theme.palette.secondary.main,
         weight: 4,
-        dashArray: '8 8',
+        dashArray: journey.plan?.route.source === 'road' ? undefined : '8 8',
       }).addTo(group);
-    if (driver && pickup)
-      L.polyline([latLng(driver), latLng(pickup)], {
+    if (driver && target)
+      L.polyline(approach.plan?.route.geometry.map(latLng) || [latLng(driver), latLng(target)], {
         color: theme.palette.primary.main,
         weight: 3,
-        dashArray: '4 8',
+        dashArray: approach.plan?.route.source === 'road' ? undefined : '4 8',
       }).addTo(group);
     // Reframe for selected endpoints, but don't interrupt panning on every driver update.
     const key = JSON.stringify([pickup, dropoff]);
@@ -91,7 +104,7 @@ export function RideMap({ pickup, dropoff, driver, onSelect, instruction }: Prop
         instance.fitBounds(L.latLngBounds(points), { padding: [55, 55], maxZoom: 15 });
       else instance.setView(points[0], 14);
     }
-  }, [pickup, dropoff, driver, theme]);
+  }, [pickup, dropoff, driver, target, theme, journey.plan, approach.plan]);
   return (
     <Stack spacing={1.5}>
       {instruction && (
@@ -139,9 +152,47 @@ export function RideMap({ pickup, dropoff, driver, onSelect, instruction }: Prop
           </Stack>
         ))}
       </Stack>
+      {guidance && (
+        <Stack spacing={1}>
+          <Typography fontWeight={700}>
+            {driver ? (pickedUp ? 'To destination' : 'To pickup') : 'Trip route'} ·{' '}
+            {(guidance.distance_meters / 1000).toFixed(1)} km
+            {guidance.duration_seconds != null
+              ? ` · about ${Math.max(1, Math.ceil(guidance.duration_seconds / 60))} min`
+              : ' · ETA unavailable'}
+          </Typography>
+          {guidance.warning && <Alert severity="info">{guidance.warning}</Alert>}
+          {guidance.source === 'road' && (
+            <Box component="details">
+              <Typography component="summary">Road directions</Typography>
+              <Box component="ol" sx={{ pl: 3 }}>
+                {guidance.steps.map((step, index) => (
+                  <Box component="li" key={index} sx={{ mb: 1 }}>
+                    {step.instruction} · {Math.round(step.distance_meters)} m
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+          {target && driver && (
+            <Button
+              component="a"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="outlined"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${target.lat},${target.lon}&travelmode=driving&dir_action=navigate`}
+            >
+              Open live navigation
+            </Button>
+          )}
+        </Stack>
+      )}
+      {(journey.error || approach.error) && (
+        <Alert severity="info">{journey.error || approach.error}</Alert>
+      )}
       <Typography variant="caption" color="text.secondary">
-        Dotted lines connect the points; they are not road directions. Map tiles need an internet
-        connection.
+        Road estimates use OSRM / OpenStreetMap and do not include live traffic. Dashed lines
+        indicate a straight-line fallback. Map tiles require a connection.
       </Typography>
     </Stack>
   );

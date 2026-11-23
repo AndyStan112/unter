@@ -9,4 +9,8 @@ final class Rows {
         OffsetDateTime value=rs.getObject(column,OffsetDateTime.class);
         return value==null ? null : value.toInstant();
     }
+    static Double decimalDouble(ResultSet rs, String column) throws SQLException {
+        var value=rs.getBigDecimal(column);
+        return value==null ? null : value.doubleValue();
+    }
 }

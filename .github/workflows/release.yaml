@@ -16,6 +16,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    env:
+      COMPOSE_FILE: compose.yaml:compose.test.yaml
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -39,6 +41,7 @@ jobs:
           uv run --project services/python python scripts/integration.py
           uv run --project services/python python scripts/readonly-check.py
           uv run --project services/python python scripts/stats-check.py
+          uv run --project services/python python scripts/ride-check.py
           uv run --project services/python python scripts/schedule-check.py
           uv run --project services/python python scripts/simulate.py --duration 30 --riders 8 --drivers 3 --race-rounds 2 --pace 0.3 --snapshot-interval 5 --output .local/simulations
       - name: Save simulator evidence

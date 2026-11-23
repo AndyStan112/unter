@@ -57,3 +57,41 @@ self.addEventListener('fetch', (event) => {
       ),
   );
 });
+
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    (async () => {
+      let payload;
+      try {
+        payload = event.data.json();
+      } catch {
+        return;
+      }
+      if (payload.expires_at && Date.parse(payload.expires_at) <= Date.now()) return;
+      const url = ['/ride/passenger', '/ride/driver'].includes(payload.url)
+        ? payload.url
+        : '/ride/';
+      await self.registration.showNotification(payload.title || 'Unter ride update', {
+        body: payload.body || 'Open Unter for the latest status.',
+        icon: '/icon-192.png',
+        tag: payload.tag || 'unter-ride',
+        data: { url },
+      });
+    })(),
+  );
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || '/ride/', self.location.origin);
+  if (url.origin !== self.location.origin || !url.pathname.startsWith('/ride/')) return;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const existing = windows.find((client) => new URL(client.url).pathname.startsWith('/ride/'));
+      if (existing) {
+        await existing.navigate(url.href);
+        await existing.focus();
+      } else await self.clients.openWindow(url.href);
+    })(),
+  );
+});

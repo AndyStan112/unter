@@ -66,7 +66,7 @@ export interface Report {
     skipped: { zone: string; reason: string }[];
   };
   delivery?: { status: string; last_error?: string };
-  decisions?: Record<string, { status: string }>;
+  decisions?: Record<string, { status: string; error?: string; core_proposal_id?: string }>;
 }
 export interface ActivityEvent {
   id: string;

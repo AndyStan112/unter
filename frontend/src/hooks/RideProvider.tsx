@@ -19,10 +19,13 @@ import type {
   Role,
   Trip,
   Zone,
+  DriverEarnings,
 } from '../types/ride';
 
 interface RideData {
   zones: Zone[];
+  earnings: DriverEarnings | null;
+  history: Partial<Record<Role, Trip[]>>;
   driver: Driver | null;
   assignedDriver: Driver | null;
   trips: Partial<Record<Role, Trip | null>>;
@@ -50,6 +53,8 @@ interface RideContextValue extends RideData {
 const RideContext = createContext<RideContextValue | null>(null);
 const initialData: RideData = {
   zones: [],
+  earnings: null,
+  history: {},
   driver: null,
   assignedDriver: null,
   trips: {},
@@ -129,6 +134,19 @@ export function RideProvider({ children }: { children: ReactNode }) {
           };
         }
       }
+      const history: RideData['history'] = { ...current.data.history };
+      for (const role of ['passenger', 'driver'] as const) {
+        const profile = nextSession.profiles[role];
+        if (!profile) continue;
+        const filter = role === 'passenger' ? 'riderId' : 'driverId';
+        history[role] = await api<Trip[]>(`trips?${filter}=${profile.id}&limit=20`);
+        const open = history[role]?.find(
+          (trip) => !['COMPLETED', 'CANCELLED', 'UNMATCHED'].includes(trip.status),
+        );
+        if (open && nextSession.tripIds[role] !== open.id)
+          nextSession = { ...nextSession, tripIds: { ...nextSession.tripIds, [role]: open.id } };
+      }
+      const earnings = driver ? await api<DriverEarnings>(`drivers/${driver.id}/earnings`) : null;
       for (const role of ['passenger', 'driver'] as const) {
         const id = nextSession.tripIds[role];
         if (!id) continue;
@@ -144,7 +162,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
       if (trips.passenger?.driver_id)
         assignedDriver = await api<Driver>(`drivers/${trips.passenger.driver_id}`);
       if (nextSession !== current.session) remember(nextSession);
-      const next = { zones, driver, assignedDriver, trips, offer };
+      const next = { zones, driver, assignedDriver, trips, offer, earnings, history };
       current.data = next;
       if (current.mounted) {
         setData(next);
@@ -178,11 +196,16 @@ export function RideProvider({ children }: { children: ReactNode }) {
       tick();
     };
     window.addEventListener('online', tick);
+    const visible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', visible);
     window.addEventListener('storage', sync);
     return () => {
       current.mounted = false;
       clearInterval(timer);
       window.removeEventListener('online', tick);
+      document.removeEventListener('visibilitychange', visible);
       window.removeEventListener('storage', sync);
       if (current.watch !== null) navigator.geolocation.clearWatch(current.watch);
     };
@@ -244,6 +267,8 @@ export function RideProvider({ children }: { children: ReactNode }) {
           rider_id: profile('passenger').id,
           pickup,
           dropoff,
+          pickup_label: pickup.label,
+          dropoff_label: dropoff.label,
         });
         remember({
           ...refs.current.session,

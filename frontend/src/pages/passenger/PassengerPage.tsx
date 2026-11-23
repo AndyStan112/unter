@@ -12,6 +12,10 @@ import {
 } from '@mui/material';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
+import { TripHistory } from '../../components/ride/TripHistory';
+import { NotificationSettings } from '../../components/ride/NotificationSettings';
+import { useRidePlan } from '../../hooks/useRidePlan';
+import { money } from '../../components/ride/EarningsCard';
 import { useRide } from '../../hooks/RideProvider';
 import { isTerminal, samePoint } from '../../services/rideState';
 import { RideMap } from '../../components/ride/RideMap';
@@ -21,7 +25,7 @@ import { TripCard } from '../../components/ride/TripCard';
 import type { Point } from '../../types/ride';
 
 export default function PassengerPage() {
-  const { session, zones, trips, assignedDriver, online, busy, requestTrip } = useRide();
+  const { session, zones, trips, history, assignedDriver, online, busy, requestTrip } = useRide();
   const [pickup, setPickup] = useState<Point | null>(null),
     [dropoff, setDropoff] = useState<Point | null>(null);
   const [selecting, setSelecting] = useState<'pickup' | 'dropoff'>('pickup'),
@@ -34,6 +38,12 @@ export default function PassengerPage() {
   }, [zones]);
   const trip = trips.passenger,
     active = !!trip && !isTerminal(trip);
+  const estimate = useRidePlan(active ? null : pickup, active ? null : dropoff);
+  const freshDriver =
+    assignedDriver?.position_updated_at &&
+    Date.now() - Date.parse(assignedDriver.position_updated_at) < 120000
+      ? assignedDriver.position
+      : null;
   const selectPoint = (point: Point) => {
     if (selecting === 'pickup') {
       setPickup(point);
@@ -108,6 +118,20 @@ export default function PassengerPage() {
                     {pickup && dropoff && samePoint(pickup, dropoff) && (
                       <Alert severity="info">Choose a different destination.</Alert>
                     )}
+                    {estimate.loading && <Typography>Calculating route and fare…</Typography>}
+                    {estimate.plan && (
+                      <Alert severity="info">
+                        Estimated fare {money(estimate.plan.fare)} ·{' '}
+                        {estimate.plan.route.source === 'road'
+                          ? 'road distance'
+                          : 'straight-line fallback'}
+                        {estimate.plan.route.duration_seconds != null &&
+                          ` · about ${Math.ceil(estimate.plan.route.duration_seconds / 60)} min`}
+                        {estimate.plan.surge_multiplier > 1 &&
+                          ` · ${estimate.plan.surge_multiplier}× surge`}
+                      </Alert>
+                    )}
+                    {estimate.error && <Alert severity="info">{estimate.error}</Alert>}
                     <Button
                       type="submit"
                       variant="contained"
@@ -127,6 +151,13 @@ export default function PassengerPage() {
               </Card>
             )}
             <TripCard role="passenger" />
+            {active && assignedDriver && !freshDriver && (
+              <Alert severity="warning">
+                Driver location is stale. Waiting for a fresh GPS update; pickup ETA is unavailable.
+              </Alert>
+            )}
+            <NotificationSettings role="passenger" />
+            <TripHistory trips={history.passenger || []} zones={zones} />
           </>
         )}
       </Stack>
@@ -157,9 +188,10 @@ export default function PassengerPage() {
             </Stack>
           )}
           <RideMap
+            pickedUp={trip?.status === 'PICKED_UP'}
             pickup={active ? trip.pickup : pickup}
             dropoff={active ? trip.dropoff : dropoff}
-            driver={active ? assignedDriver?.position : null}
+            driver={active ? freshDriver : null}
             onSelect={!active && !busy ? selectPoint : undefined}
             instruction={
               active

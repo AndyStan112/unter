@@ -31,7 +31,8 @@ The map uses Leaflet and standard OpenStreetMap tiles with visible attribution.
 Set `VITE_MAP_TILE_URL` at build time to use another compatible OSM-attributed tile
 server. Production deployments with higher traffic should configure a suitable
 provider. Markers can be selected by tapping the map or by using accessible zone
-fields. Dotted lines connect locations; they are not road routing or navigation.
+fields or explicit address searches. OSRM road routes include distance, ETA and directions; dashed
+lines indicate an unavailable routing provider. Drivers can open live navigation.
 Live driver GPS is only sent while this app is open and the driver is online.
 
 The existing shared development Basic Auth and browser-local profiles remain in
@@ -41,3 +42,8 @@ PWA URLs include a deterministic build version so a CDN retaining old `.js`,
 manifest or icon responses cannot pin the app to an earlier shell. The generated
 worker caches only those explicit public URLs and hashed bundles; arbitrary query
 strings and API requests still bypass it.
+
+The driver screen displays mock earnings from core's transactional settlement ledger. Passenger and
+driver trip history are fetched by profile ID. Push preferences select one receiving profile per
+browser subscription; notification payloads contain only status text and an app route. The service
+worker never reads Basic Auth credentials or caches private API responses.

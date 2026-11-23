@@ -142,3 +142,30 @@ else:
     raise AssertionError('Core Flyway history was not created')
 assert postgres('SELECT bool_and(success) FROM flyway_schema_history', database='core').strip() == 't'
 print('PASS: core Flyway history is present with successful migrations')
+
+# Upgrade a populated pre-earnings core schema, rather than testing only an empty fresh database.
+legacy_core = 'unter_migration_test_core_' + uuid.uuid4().hex[:12]
+postgres('CREATE DATABASE ' + legacy_core)
+try:
+    migration_dir = ROOT / 'services/core/src/main/resources/db/migration'
+    history = sorted(migration_dir.glob('V*__*.sql'), key=lambda path: int(path.name.split('__')[0][1:]))
+    for migration in history:
+        if int(migration.name.split('__')[0][1:]) <= 7:
+            postgres(migration.read_text(), database=legacy_core)
+    postgres("""
+        INSERT INTO riders(id,name) VALUES ('00000000-0000-4000-8000-000000000001','Historical rider');
+        INSERT INTO drivers(id,name) VALUES ('00000000-0000-4000-8000-000000000002','Historical driver');
+        INSERT INTO trips(id,rider_id,driver_id,zone,pickup_lat,pickup_lon,dropoff_lat,dropoff_lon,status,price,completed_at)
+        VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001',
+                '00000000-0000-4000-8000-000000000002','Centru',45.75,21.22,45.76,21.24,'COMPLETED',12.34,now()-interval '1 day');
+    """, database=legacy_core)
+    for migration in history:
+        if int(migration.name.split('__')[0][1:]) > 7:
+            postgres(migration.read_text(), database=legacy_core)
+    assert postgres("SELECT count(*)=1 AND bool_and(fare=12.34 AND bonus=0 AND total=12.34 AND payment_status='mock_settled') FROM driver_earnings",
+                    database=legacy_core).strip() == 't'
+    assert postgres("SELECT price=12.34 AND driver_bonus=0 AND distance_meters IS NULL FROM trips",
+                    database=legacy_core).strip() == 't'
+    print('PASS: populated core upgrade preserves historical fares and backfills one mock settlement without inventing bonuses')
+finally:
+    postgres('DROP DATABASE ' + legacy_core + ' WITH (FORCE)')

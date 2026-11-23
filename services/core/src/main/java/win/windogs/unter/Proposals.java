@@ -32,6 +32,58 @@ public class Proposals {
     public record NewProposal(@NotBlank @Size(max=80) String zone, @NotBlank @Size(max=1000) String reason,
                               @Pattern(regexp="surge|incentive") String type, JsonNode params) {}
     public record Decision(@Pattern(regexp="approved|rejected") @NotNull String status) {}
+    public record ReportApproval(@NotNull UUID reportId, @NotBlank @Size(max=100) String proposalId,
+                                 @NotNull @Valid NewProposal proposal, UUID existingProposalId) {}
+
+    /** Source-key locking and rule creation share one transaction. Replays return the same result,
+     * even after the proposal window has expired or a caller lost the original response. */
+    @PostMapping("/report-approvals") @Transactional
+    public Proposal approveReport(@Valid @RequestBody ReportApproval request) {
+        if (request.proposal().type()==null) throw Errors.badRequest("invalid_request","A report approval needs a surge or incentive type");
+        ObjectNode expected=params(request.proposal().type(),request.proposal().params(),false);
+        db.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            try (var statement=connection.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?,0))")) {
+                statement.setString(1,request.reportId()+":"+request.proposalId()); statement.execute();
+            }
+            return null;
+        });
+        List<Proposal> found=db.query("SELECT * FROM proposals WHERE report_id=? AND report_proposal_key=? FOR UPDATE",
+                this::map,request.reportId(),request.proposalId());
+        if (found.isEmpty()) {
+            // Adopt an interrupted approval made by the previous gateway version. Never guess
+            // when legacy duplicates exist; they require an operator to reconcile them.
+            found=request.existingProposalId()!=null
+                ? db.query("SELECT * FROM proposals WHERE id=? FOR UPDATE",this::map,request.existingProposalId())
+                : db.query("SELECT * FROM proposals WHERE reason=? AND report_id IS NULL FOR UPDATE",this::map,request.proposal().reason());
+            if (request.existingProposalId()!=null && found.isEmpty())
+                throw Errors.conflict("approval_source_mismatch","The recorded core proposal no longer exists; reconcile it under Proposals");
+            if (found.size()>1) throw Errors.conflict("ambiguous_approval","Several legacy proposals match; reconcile them under Proposals");
+            Proposal proposal;
+            if (found.isEmpty()) proposal=create(request.proposal());
+            else {
+                proposal=found.get(0);
+                if (!matches(proposal,request.proposal(),expected))
+                    throw Errors.conflict("approval_source_mismatch","Existing proposal does not match this report");
+            }
+            if (db.update("UPDATE proposals SET report_id=?, report_proposal_key=? WHERE id=? AND report_id IS NULL",
+                    request.reportId(),request.proposalId(),proposal.id())!=1)
+                throw Errors.conflict("approval_source_mismatch","Proposal already belongs to a report");
+            found=List.of(proposal);
+        }
+        Proposal proposal=found.get(0);
+        if (!matches(proposal,request.proposal(),expected))
+            throw Errors.conflict("approval_source_mismatch","This report key was used with different proposal values");
+        if (proposal.status().equals("approved")) return proposal;
+        if (!proposal.status().equals("pending")) throw Errors.conflict("proposal_not_pending","Proposal was rejected");
+        if (!Instant.parse(proposal.params().get("ends_at").asText()).isAfter(Instant.now()))
+            throw Errors.badRequest("invalid_request","This proposal has expired");
+        return decide(proposal.id(),new Decision("approved"));
+    }
+    private boolean matches(Proposal stored, NewProposal given, ObjectNode expected) {
+        return stored.zone().equals(given.zone()) && Objects.equals(stored.type(),given.type())
+            && stored.reason().equals(given.reason()) && Boolean.TRUE.equals(db.queryForObject(
+                "SELECT params=?::jsonb FROM proposals WHERE id=?",Boolean.class,expected.toString(),stored.id()));
+    }
 
     Proposal map(ResultSet rs, int row) throws SQLException {
         String params=rs.getString("params");
@@ -86,6 +138,9 @@ public class Proposals {
 
     /** Checks and normalizes the parameters of a typed proposal: an amount and a time window. */
     private ObjectNode params(String type, JsonNode given) {
+        return params(type,given,true);
+    }
+    private ObjectNode params(String type, JsonNode given, boolean checkFuture) {
         boolean none=given==null || given.isNull();
         if (type==null) {
             if (!none) throw Errors.badRequest("invalid_request","params need a type");
@@ -94,7 +149,7 @@ public class Proposals {
         if (none || !given.isObject()) throw Errors.badRequest("invalid_request","params are required for a "+type+" proposal");
         Instant starts=instant(given,"starts_at"), ends=instant(given,"ends_at");
         if (!ends.isAfter(starts)) throw Errors.badRequest("invalid_request","ends_at must be after starts_at");
-        if (!ends.isAfter(Instant.now())) throw Errors.badRequest("invalid_request","ends_at must be in the future");
+        if (checkFuture && !ends.isAfter(Instant.now())) throw Errors.badRequest("invalid_request","ends_at must be in the future");
         ObjectNode params=json.createObjectNode();
         if (type.equals("surge")) params.put("multiplier",amount(given,"multiplier",BigDecimal.ONE,new BigDecimal("3")));
         else params.put("bonus_per_trip",amount(given,"bonus_per_trip",BigDecimal.ZERO,new BigDecimal("20")));

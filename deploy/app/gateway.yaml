@@ -72,6 +72,8 @@ spec:
             secretKeyRef:
               name: unter-secrets
               key: ADMIN_PASSWORD
+        - name: GEOCODING_URL
+          value: https://photon.komoot.io
         - name: SERVICE_MODULE
           value: gateway
         securityContext:

@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 import json
 import os
 import re
@@ -7,8 +9,33 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response, JSONResponse
 from .auth import BasicAuth, basic_header
 from .frontend import FrontendFiles
+from .places import router as places_router
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+async def reconcile_approvals():
+    while True:
+        await asyncio.sleep(15)
+        try:
+            async with httpx.AsyncClient(timeout=10, headers={'Authorization': basic_header()}) as client:
+                response = await client.get(os.getenv('AGENT_URL', 'http://agent:8000') + '/pending-decisions')
+                response.raise_for_status()
+                pending = response.json()
+            for row in pending:
+                await apply_decision(str(row['report_id']), row['proposal_id'], 'approved')
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass  # Durable intents survive restarts. No credentials or report data in logs.
+
+
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(reconcile_approvals())
+    yield
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 # Static assets contain no private data; only /ride/ is an installable offline shell.
 # All application data and actions require this one administrator login.
 
@@ -19,10 +46,14 @@ def health():
 
 api = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 api.add_middleware(BasicAuth, kind='ADMIN', csrf=True)
+api.include_router(places_router)
 
 # Worker and agent routes are listed one by one. Every other /api path belongs to core, which
 # authenticates and validates each request itself.
 ROUTES = {
+    'push-key': ('WORKER_URL', 'http://worker:8000', '/push-key', {'GET'}),
+    'push-subscriptions': ('WORKER_URL', 'http://worker:8000', '/push-subscriptions', {'POST'}),
+    'push-unsubscribe': ('WORKER_URL', 'http://worker:8000', '/push-unsubscribe', {'POST'}),
     'activity': ('WORKER_URL', 'http://worker:8000', '/activity', {'GET'}),
     'schedule': ('AGENT_URL', 'http://agent:8000', '/schedule', {'GET', 'PUT'}),
     'runs': ('AGENT_URL', 'http://agent:8000', '/runs', {'GET'}),
@@ -68,6 +99,10 @@ async def decide(report_id: str, request: Request):
         assert isinstance(proposal_id, str) and decision in ('approved', 'rejected')
     except (ValueError, KeyError, TypeError, AssertionError):
         return JSONResponse({'detail': 'Send proposal_id and decision (approved or rejected)'}, 422)
+    return await apply_decision(report_id, proposal_id, decision)
+
+
+async def apply_decision(report_id: str, proposal_id: str, decision: str):
     agent = os.getenv('AGENT_URL', 'http://agent:8000')
     core = os.getenv('CORE_URL', 'http://core:8080')
     headers = {'Authorization': basic_header()}
@@ -79,21 +114,26 @@ async def decide(report_id: str, request: Request):
                 return JSONResponse({'detail': detail(claim, 'Could not record the decision')}, claim.status_code)
             if decision == 'rejected':
                 return JSONResponse({'status': 'rejected'})
-            proposal = claim.json()['proposal']
-            created = await client.post(core + '/proposals', json={
-                'zone': proposal['zone'], 'type': proposal['type'], 'params': proposal['params'],
-                'reason': core_reason(proposal, report_id)})
-            if created.status_code not in (200, 201):
-                await client.delete(agent + '/decisions', params=key)
-                return JSONResponse({'detail': 'Core refused the proposal: ' + detail(created, 'unknown error')},
-                                    created.status_code if created.status_code < 500 else 502)
-            core_id = created.json()['id']
-            approved = await client.patch(f'{core}/proposals/{core_id}', json={'status': 'approved'})
-            status = 'applied' if approved.status_code == 200 else 'created'
-            await client.put(agent + '/decisions', json={**key, 'status': status, 'core_proposal_id': core_id})
-            if status == 'created':
-                return JSONResponse({'detail': 'The proposal was created in core but not approved. '
-                                               'Approve it under Proposals.', 'core_proposal_id': core_id}, 502)
+            claimed = claim.json()
+            if claimed['status'] == 'applied':
+                return JSONResponse({'status': 'applied', 'core_proposal_id': claimed['core_proposal_id']})
+            proposal = claimed['proposal']
+            approved = await client.post(core + '/report-approvals', json={
+                **key, 'existing_proposal_id': claimed.get('core_proposal_id'),
+                'proposal': {'zone': proposal['zone'], 'type': proposal['type'], 'params': proposal['params'],
+                             'reason': core_reason(proposal, report_id)}})
+            if approved.status_code != 200:
+                if 400 <= approved.status_code < 500:
+                    await client.put(agent + '/decisions', json={**key, 'status': 'failed',
+                        'error': detail(approved, 'Core refused this approval')[:500]})
+                # Keep the durable intent: neither network failures nor 5xx responses prove
+                # that core did not commit. Retrying always uses the same source key.
+                return JSONResponse({'detail': detail(approved, 'Approval is pending. Retry to recover it.')},
+                                    approved.status_code if approved.status_code < 500 else 502)
+            core_id = approved.json()['id']
+            recorded = await client.put(agent + '/decisions', json={**key, 'status': 'applied', 'core_proposal_id': core_id})
+            if recorded.status_code != 200:
+                return JSONResponse({'detail': 'Core approved the proposal. Retry to synchronize its report status.'}, 503)
             return JSONResponse({'status': 'applied', 'core_proposal_id': core_id})
     except httpx.HTTPError:
         return JSONResponse({'detail': 'Service temporarily unavailable'}, 503)

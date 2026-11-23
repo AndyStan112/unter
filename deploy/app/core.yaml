@@ -75,6 +75,8 @@ spec:
             secretKeyRef:
               name: unter-secrets
               key: RABBITMQ_PASSWORD
+        - name: ROUTING_URL
+          value: https://router.project-osrm.org
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

@@ -2,6 +2,7 @@ package win.windogs.unter;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.time.Instant;
@@ -23,22 +24,24 @@ public class Trips {
     private final Outbox outbox;
     private final Dispatch dispatch;
     private final Zones zones;
-    public Trips(JdbcTemplate db, PlatformTransactionManager transactions, Outbox outbox, Dispatch dispatch, Zones zones) {
-        this.db=db; this.tx=new TransactionTemplate(transactions); this.outbox=outbox; this.dispatch=dispatch; this.zones=zones;
+    private final Earnings earnings;
+    private final Routing routing;
+    public Trips(JdbcTemplate db, PlatformTransactionManager transactions, Outbox outbox, Dispatch dispatch, Zones zones, Earnings earnings, Routing routing) {
+        this.db=db; this.tx=new TransactionTemplate(transactions); this.outbox=outbox; this.dispatch=dispatch; this.zones=zones; this.earnings=earnings; this.routing=routing;
     }
 
     public record Trip(UUID id, UUID riderId, UUID driverId, String zone, Position pickup, Position dropoff, String status,
-                       BigDecimal surgeMultiplier, BigDecimal price, Instant requestedAt, Instant assignedAt,
+                       BigDecimal surgeMultiplier, BigDecimal price, BigDecimal driverBonus, UUID incentiveId, Double distanceMeters, Double durationSeconds, String distanceSource, String pickupLabel, String dropoffLabel, Instant requestedAt, Instant assignedAt,
                        Instant pickedUpAt, Instant completedAt, Instant cancelledAt) {}
     public record TripEvent(Trip trip) {}
-    public record NewTrip(@NotNull UUID riderId, @NotNull @Valid Point pickup, @NotNull @Valid Point dropoff) {}
+    public record NewTrip(@NotNull UUID riderId, @NotNull @Valid Point pickup, @NotNull @Valid Point dropoff, @Size(max=250) String pickupLabel, @Size(max=250) String dropoffLabel) {}
     public record ByRider(@NotNull UUID riderId) {}
     public record ByDriver(@NotNull UUID driverId) {}
 
     static Trip map(ResultSet rs, int row) throws SQLException {
         return new Trip(rs.getObject("id",UUID.class),rs.getObject("rider_id",UUID.class),rs.getObject("driver_id",UUID.class),rs.getString("zone"),
                 new Position(rs.getDouble("pickup_lat"),rs.getDouble("pickup_lon")),new Position(rs.getDouble("dropoff_lat"),rs.getDouble("dropoff_lon")),
-                rs.getString("status"),rs.getBigDecimal("surge_multiplier"),rs.getBigDecimal("price"),Rows.time(rs,"requested_at"),
+                rs.getString("status"),rs.getBigDecimal("surge_multiplier"),rs.getBigDecimal("price"),rs.getBigDecimal("driver_bonus"),rs.getObject("incentive_id",UUID.class),Rows.decimalDouble(rs,"distance_meters"),Rows.decimalDouble(rs,"duration_seconds"),rs.getString("distance_source"),rs.getString("pickup_label"),rs.getString("dropoff_label"),Rows.time(rs,"requested_at"),
                 Rows.time(rs,"assigned_at"),Rows.time(rs,"picked_up_at"),Rows.time(rs,"completed_at"),Rows.time(rs,"cancelled_at"));
     }
     static Trip load(JdbcTemplate db, UUID id) {
@@ -53,13 +56,14 @@ public class Trips {
     @PostMapping("/trips") @ResponseStatus(HttpStatus.CREATED)
     public Trip create(@Valid @RequestBody NewTrip trip) {
         UUID id=UUID.randomUUID();
+        Routing.Route route=routing.route(new Position(trip.pickup().lat(),trip.pickup().lon()),new Position(trip.dropoff().lat(),trip.dropoff().lon()));
         tx.executeWithoutResult(status->{
             if (db.queryForObject("SELECT count(*) FROM riders WHERE id=?",Integer.class,trip.riderId())==0)
                 throw Errors.badRequest("unknown_rider","Unknown rider");
             try {
-                db.update("INSERT INTO trips(id,rider_id,zone,pickup_lat,pickup_lon,dropoff_lat,dropoff_lon) VALUES (?,?,?,?,?,?,?)",
+                db.update("INSERT INTO trips(id,rider_id,zone,pickup_lat,pickup_lon,dropoff_lat,dropoff_lon,distance_meters,duration_seconds,distance_source,pickup_label,dropoff_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         id,trip.riderId(),zones.nearest(trip.pickup().lat(),trip.pickup().lon()),
-                        trip.pickup().lat(),trip.pickup().lon(),trip.dropoff().lat(),trip.dropoff().lon());
+                        trip.pickup().lat(),trip.pickup().lon(),trip.dropoff().lat(),trip.dropoff().lon(),route.distanceMeters(),route.durationSeconds(),route.source(),trip.pickupLabel(),trip.dropoffLabel());
             } catch (DuplicateKeyException e) { throw Errors.conflict("rider_has_open_trip","Rider already has an open trip"); }
             outbox.add("trip.requested",new TripEvent(load(db,id)));
         });
@@ -69,11 +73,11 @@ public class Trips {
     }
     @GetMapping("/trips/{id}") public Trip get(@PathVariable UUID id) { return load(db,id); }
     @GetMapping("/trips") public List<Trip> list(@RequestParam(required=false) String status, @RequestParam(required=false) String zone,
-                                                 @RequestParam(defaultValue="50") int limit) {
+                                                 @RequestParam(defaultValue="50") int limit, @RequestParam(required=false) UUID riderId, @RequestParam(required=false) UUID driverId) {
         if (status!=null && !STATUSES.contains(status)) throw Errors.badRequest("invalid_request","Unknown trip status");
         if (limit<1 || limit>200) throw Errors.badRequest("invalid_request","limit must be between 1 and 200");
-        return db.query("SELECT * FROM trips WHERE (?::text IS NULL OR status=?) AND (?::text IS NULL OR zone=?) ORDER BY requested_at DESC LIMIT ?",
-                Trips::map,status,status,zone,zone,limit);
+        return db.query("SELECT * FROM trips WHERE (?::text IS NULL OR status=?) AND (?::text IS NULL OR zone=?) AND (?::uuid IS NULL OR rider_id=?) AND (?::uuid IS NULL OR driver_id=?) ORDER BY requested_at DESC LIMIT ?",
+                Trips::map,status,status,zone,zone,riderId,riderId,driverId,driverId,limit);
     }
 
     @PostMapping("/trips/{id}/cancel") @Transactional
@@ -95,8 +99,12 @@ public class Trips {
     }
     @PostMapping("/trips/{id}/complete") @Transactional
     public Trip complete(@PathVariable UUID id, @Valid @RequestBody ByDriver by) {
+        Trip current=lock(id);
+        if (!by.driverId().equals(current.driverId())) throw Errors.conflict("not_your_trip","Trip is not assigned to this driver");
+        if (current.status().equals("COMPLETED")) return current;
         Trip trip=driversTrip(id,by.driverId(),"PICKED_UP");
         Trip completed=update("UPDATE trips SET status='COMPLETED', completed_at=now() WHERE id=? RETURNING *",trip.id());
+        earnings.settle(completed);
         outbox.add("trip.completed",new TripEvent(completed));
         dispatch.freeDriver(trip.id());
         return completed;

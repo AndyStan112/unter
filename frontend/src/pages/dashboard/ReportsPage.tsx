@@ -49,6 +49,7 @@ const decisionLabels: Record<string, string> = {
   created: 'Created in core · approve under Proposals',
   rejected: 'Rejected',
   applying: 'Applying…',
+  failed: 'Approval failed',
 };
 function ReportCard({ row }: { row: Report }) {
   const { busy, online, execute } = useDashboard();
@@ -122,7 +123,23 @@ function ReportCard({ row }: { row: Report }) {
                   )}
                   <Stack direction="row" gap={1}>
                     {decision ? (
-                      <StatusChip label={decisionLabels[decision.status] || decision.status} />
+                      <>
+                        <StatusChip label={decisionLabels[decision.status] || decision.status} />
+                        {decision.error && (
+                          <Typography variant="body2" color="error">
+                            {decision.error}
+                          </Typography>
+                        )}
+                        {['applying', 'created', 'failed'].includes(decision.status) && (
+                          <Button
+                            size="small"
+                            disabled={busy || !online}
+                            onClick={() => void decide(proposal, 'approved')}
+                          >
+                            Retry approval
+                          </Button>
+                        )}
+                      </>
                     ) : expired ? (
                       <Chip size="small" label="Expired" />
                     ) : (

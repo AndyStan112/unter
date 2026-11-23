@@ -54,6 +54,7 @@ services:
     environment:
       <<: [*auth, *reader, *db]
       DB_PASSWORD: ${CORE_DB_PASSWORD:?}
+      ROUTING_URL: ${ROUTING_URL-https://router.project-osrm.org}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
     depends_on:
       postgres: {condition: service_healthy}
@@ -125,6 +126,7 @@ services:
       SERVICE_MODULE: gateway
       ADMIN_USERNAME: ${ADMIN_USERNAME:?}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+      GEOCODING_URL: ${GEOCODING_URL:-https://photon.komoot.io}
     ports: ['127.0.0.1:5180:8000']
     depends_on: [core, worker, mcp, agent]
 volumes:

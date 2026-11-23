@@ -24,13 +24,13 @@ save('namespace.yaml',[
  {'apiVersion':'v1','kind':'ResourceQuota','metadata':meta('unter-budget'),'spec':{'hard':{'requests.cpu':'3','requests.memory':'4Gi','limits.cpu':'8','limits.memory':'6Gi','requests.storage':'8Gi','persistentvolumeclaims':'4','pods':'16'}}},
 ])
 services={
- 'core':{'image':'unter-core','port':8080,'env':auth+reader+database('core')+[sec('RABBITMQ_PASSWORD')],'memory':'768Mi','cpu':'100m'},
+ 'core':{'image':'unter-core','port':8080,'env':auth+reader+database('core')+[sec('RABBITMQ_PASSWORD'),env('ROUTING_URL','https://router.project-osrm.org')],'memory':'768Mi','cpu':'100m'},
  'worker':{'module':'worker','env':auth+database('activity')+[sec('RABBITMQ_PASSWORD')],'memory':'512Mi'},
  'mcp':{'module':'mcp_server','env':reader,'memory':'512Mi'},
  'agent':{'module':'agent','env':auth+reader+database('agent')+[sec('OPENAI_API_KEY'),sec('OPENAI_MODEL'),env('AGENT_MODE','live'),env('MAX_DAILY_RUNS','30'),env('AGNO_TELEMETRY','false'),sec('RABBITMQ_PASSWORD')],'memory':'768Mi'},
  # The mailer records delivery state in the agent database (report_deliveries), with the agent's login.
  'mailer':{'module':'mailer','env':database('agent')+[sec('RABBITMQ_PASSWORD')]+smtp,'memory':'256Mi','cpu_limit':'250m'},
- 'gateway':{'module':'gateway','env':auth+reader+[sec('ADMIN_USERNAME'),sec('ADMIN_PASSWORD')],'memory':'256Mi'},
+ 'gateway':{'module':'gateway','env':auth+reader+[sec('ADMIN_USERNAME'),sec('ADMIN_PASSWORD'),env('GEOCODING_URL','https://photon.komoot.io')],'memory':'256Mi'},
 }
 for name, spec in services.items():
     port=spec.get('port',8000)
@@ -80,7 +80,7 @@ for target in ['core','worker','agent','mcp','postgres','rabbitmq']:
 policies.extend([
  {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('gateway-caddy'),'spec':{'podSelector':{'matchLabels':{'app':'gateway'}},'policyTypes':['Ingress'],'ingress':[{'from':[{'ipBlock':{'cidr':'172.22.0.0/16'}}],'ports':[{'protocol':'TCP','port':8000}]}]}},
  {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('mailer-smtp'),'spec':{'podSelector':{'matchLabels':{'app':'mailer'}},'policyTypes':['Egress'],'egress':[{'to':[{'ipBlock':{'cidr':'0.0.0.0/0','except':['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','127.0.0.0/8']}}],'ports':[{'protocol':'TCP','port':p} for p in (465,587)]}]}},
- {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('agent-openai'),'spec':{'podSelector':{'matchLabels':{'app':'agent'}},'policyTypes':['Egress'],'egress':[{'to':[{'ipBlock':{'cidr':'0.0.0.0/0','except':['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','127.0.0.0/8']}}],'ports':[{'protocol':'TCP','port':443}]}]}}
+ {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':meta('external-https'),'spec':{'podSelector':{'matchExpressions':[{'key':'app','operator':'In','values':['agent','core','gateway','worker']}]},'policyTypes':['Egress'],'egress':[{'to':[{'ipBlock':{'cidr':'0.0.0.0/0','except':['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','127.0.0.0/8']}}],'ports':[{'protocol':'TCP','port':443}]}]}}
 ])
 save('network-policy.yaml',policies)
 resources=sorted(p.name for p in OUT.glob('*.yaml') if p.name!='kustomization.yaml')

@@ -109,3 +109,16 @@ and rolls back schema/version changes. Each Python database has its own
 See [database migrations](../docs/database-migrations.md) for operational commands
 and compatibility/rollback details. CI tests fresh installs and legacy adoption
 before publishing images. Secrets and database ownership stay unchanged.
+
+## Ride earnings, routing and push upgrade
+
+Deploy core V8–V10, agent `agent_0005` and activity `activity_0002` together with the new gateway/UI.
+All migrations run at startup. Core backfills only stored historical fares, with zero old bonus.
+Core needs public HTTPS egress for OSRM, gateway for Photon, and worker for browser push providers;
+the generated `external-https` policy provides this without allowing private-network access.
+MCP/agent still cannot write to core. Provider base URLs are configurable in the core/gateway
+manifests (regenerate consistently); no paid map or payment credential is needed.
+The worker generates one persistent VAPID identity in its own database. Include that database in
+backups and preserve it across restarts. No Secret synchronization is required for push.
+Existing approval intents are retried by the gateway after restart; legacy proposals with ambiguous
+duplicates stop for operator reconciliation. Mock balances are never external payment accounts.

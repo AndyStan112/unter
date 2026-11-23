@@ -1,4 +1,4 @@
-.PHONY: init up dev frontend-build test integration migrations-check readonly-check stats-check simulate deploy
+.PHONY: init up dev frontend-build test integration migrations-check readonly-check stats-check ride-check simulate deploy
 init:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv sync --project services/python --frozen
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/init-env.py
@@ -22,6 +22,8 @@ readonly-check:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/readonly-check.py
 stats-check:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/stats-check.py
+ride-check:
+	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/ride-check.py
 simulate:
 	UV_CACHE_DIR=/tmp/unter-uv-cache uv run --project services/python python scripts/simulate.py $(SIM_ARGS)
 deploy:

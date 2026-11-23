@@ -88,8 +88,10 @@ public class Dispatch {
             if (accepted.isEmpty()) throw ended(Offers.load(db,offerId));
             Trip trip=Trips.load(db,offer.tripId());
             BigDecimal surge=pricing.surge(trip.zone());
-            Trip assigned=db.query("UPDATE trips SET status='ASSIGNED', driver_id=?, assigned_at=now(), surge_multiplier=?, price=? WHERE id=? AND status='OFFERED' RETURNING *",
-                    Trips::map,driverId,surge,pricing.price(trip.pickup(),trip.dropoff(),surge),trip.id()).get(0);
+            List<Surge.Incentive> incentives=db.query("SELECT * FROM driver_incentives WHERE zone=? AND starts_at <= now() AND ends_at > now() ORDER BY created_at DESC, id DESC LIMIT 1",Surge::mapIncentive,trip.zone());
+            Surge.Incentive incentive=incentives.isEmpty() ? null : incentives.get(0);
+            Trip assigned=db.query("UPDATE trips SET status='ASSIGNED', driver_id=?, assigned_at=now(), surge_multiplier=?, price=?, driver_bonus=?, incentive_id=? WHERE id=? AND status='OFFERED' RETURNING *",
+                    Trips::map,driverId,surge,trip.distanceMeters()==null ? pricing.price(trip.pickup(),trip.dropoff(),surge) : pricing.price(trip.distanceMeters(),surge),incentive==null ? BigDecimal.ZERO : incentive.bonusPerTrip(),incentive==null ? null : incentive.id(),trip.id()).get(0);
             if (db.update("UPDATE drivers SET status='ON_TRIP', updated_at=now() WHERE id=? AND status='OFFERED' AND current_trip_id=?",driverId,trip.id())==0)
                 throw new IllegalStateException("Driver is not holding this offer");
             outbox.add("trip.assigned",new TripEvent(assigned));

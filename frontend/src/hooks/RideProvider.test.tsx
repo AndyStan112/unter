@@ -31,7 +31,8 @@ function backend() {
   };
   let offer: DriverOffer | null = null,
     gate: Promise<void> | null = null,
-    conflict = false;
+    conflict = false,
+    booked = false;
   const fetcher = vi.fn(async (url: string, options: RequestInit) => {
     if (gate) {
       const current = gate;
@@ -40,11 +41,14 @@ function backend() {
     }
     const path = url.replace('/api/', '');
     if (conflict && path.endsWith('/accept')) {
-      conflict = false;
+      ((conflict = false), (booked = false));
       return new Response(JSON.stringify({ message: 'Offer expired' }), { status: 409 });
     }
     let data: unknown = null;
-    if (path === 'zones') data = zones;
+    if (path === 'trips' && options.method === 'POST') {
+      booked = true;
+      data = trip;
+    } else if (path === 'zones') data = zones;
     else if (path === 'riders') data = { id: 'r1', name: 'Ana' };
     else if (path === 'drivers') data = driver;
     else if (path.endsWith('/location')) {
@@ -56,6 +60,25 @@ function backend() {
       driver = { ...driver, status: 'OFFLINE' };
       data = driver;
     } else if (path.endsWith('/offer')) data = offer;
+    else if (path.endsWith('/earnings'))
+      data = {
+        balance: trip.status === 'COMPLETED' ? 18 : 0,
+        fares: 15,
+        bonuses: 3,
+        today: 18,
+        completed_trips: 1,
+        entries: [],
+        mode: 'mock',
+        currency: 'RON',
+      };
+    else if (path.startsWith('trips?'))
+      data = path.includes('driverId')
+        ? trip.driver_id === driver.id
+          ? [trip]
+          : []
+        : booked
+          ? [trip]
+          : [];
     else if (path.startsWith('drivers/')) data = driver;
     else if (path.endsWith('/accept')) {
       trip = { ...trip, status: 'ASSIGNED', driver_id: driver.id, price: 15 };
@@ -159,6 +182,7 @@ describe('ride lifecycle', () => {
     expect(result.current.trips.driver?.status).toBe('PICKED_UP');
     await act(() => result.current.advance());
     expect(result.current.trips.driver?.status).toBe('COMPLETED');
+    expect(result.current.earnings?.balance).toBe(18);
     await act(() => result.current.goOffline());
     expect(result.current.driver?.status).toBe('OFFLINE');
   });

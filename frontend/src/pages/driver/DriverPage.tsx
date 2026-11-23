@@ -1,5 +1,9 @@
 import { Box, Button, Card, CardContent, Stack, Typography } from '@mui/material';
 import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
+import { EarningsCard } from '../../components/ride/EarningsCard';
+import { TripHistory } from '../../components/ride/TripHistory';
+import { DriverPresence } from '../../components/ride/DriverPresence';
+import { NotificationSettings } from '../../components/ride/NotificationSettings';
 import { useRide } from '../../hooks/RideProvider';
 import { isTerminal } from '../../services/rideState';
 import { RideMap } from '../../components/ride/RideMap';
@@ -10,6 +14,8 @@ import { StatusChip } from '../../components/common/StatusChip';
 export default function DriverPage() {
   const {
     session,
+    earnings,
+    history,
     zones,
     trips,
     offer,
@@ -87,6 +93,10 @@ export default function DriverPage() {
               </CardContent>
             </Card>
             <TripCard role="driver" />
+            <DriverPresence />
+            <NotificationSettings role="driver" />
+            <EarningsCard earnings={earnings} />
+            <TripHistory trips={history.driver || []} zones={zones} />
           </>
         )}
       </Stack>
@@ -96,6 +106,7 @@ export default function DriverPage() {
             Your city, your next ride
           </Typography>
           <RideMap
+            pickedUp={trip?.status === 'PICKED_UP'}
             driver={driverPoint || driver?.position}
             pickup={active ? trip.pickup : null}
             dropoff={active ? trip.dropoff : null}

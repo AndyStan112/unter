@@ -35,7 +35,7 @@ public class Offers {
         List<Offer> pending=db.query("SELECT * FROM offers WHERE driver_id=? AND status='PENDING' AND expires_at > now()",Offers::map,id);
         if (pending.isEmpty()) return ResponseEntity.noContent().build();
         Trip trip=Trips.load(db,pending.get(0).tripId());
-        return ResponseEntity.ok(new DriverOffer(pending.get(0),trip,pricing.price(trip.pickup(),trip.dropoff(),pricing.surge(trip.zone()))));
+        return ResponseEntity.ok(new DriverOffer(pending.get(0),trip,trip.distanceMeters()==null ? pricing.price(trip.pickup(),trip.dropoff(),pricing.surge(trip.zone())) : pricing.price(trip.distanceMeters(),pricing.surge(trip.zone()))));
     }
     @PostMapping("/offers/{id}/accept") public OfferEvent accept(@PathVariable UUID id, @Valid @RequestBody ByDriver by) {
         return dispatch.accept(id,by.driverId());
