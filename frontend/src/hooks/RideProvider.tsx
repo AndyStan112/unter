@@ -89,7 +89,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
     try {
       saveSession(next);
     } catch {
-      setMessage('Browser storage unavailable. Keep this page open to retain your profile.');
+      setMessage('Couldn’t save your profile on this device.');
     }
   }, []);
 
@@ -231,7 +231,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
   }
   const profile = (role: Role) => {
     const found = refs.current.session.profiles[role];
-    if (!found) throw new Error('Create your profile first.');
+    if (!found) throw new Error('Add your name to continue.');
     return found;
   };
   const stopGps = () => {
@@ -297,7 +297,7 @@ export function RideProvider({ children }: { children: ReactNode }) {
           refs.current.gpsAt = Date.now();
           updateDriverPoint(point);
         },
-        () => setMessage('Location unavailable. Allow GPS access or select a point on the map.'),
+        () => setMessage('Allow location access or choose a spot on the map.'),
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
       );
     },

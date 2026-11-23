@@ -4,15 +4,19 @@ export const isTerminal = (trip: Trip | null) =>
 export const canCancel = (trip: Trip) => ['REQUESTED', 'OFFERED', 'ASSIGNED'].includes(trip.status);
 const labels: Record<TripStatus, string> = {
   REQUESTED: 'Finding your driver',
-  OFFERED: 'Waiting for a driver to accept',
+  OFFERED: 'Finding your driver',
   ASSIGNED: 'Your driver is on the way',
   PICKED_UP: 'Enjoy the ride',
   COMPLETED: 'You’ve arrived',
   CANCELLED: 'Ride cancelled',
-  UNMATCHED: 'No driver available. Try again.',
+  UNMATCHED: 'No driver available',
 };
 export const tripLabel = (trip: Trip, role: Role) =>
-  role === 'driver' && trip.status === 'ASSIGNED' ? 'Head to the pickup' : labels[trip.status];
+  role === 'driver' && trip.status === 'ASSIGNED'
+    ? 'Head to pickup'
+    : role === 'driver' && trip.status === 'PICKED_UP'
+      ? 'Head to destination'
+      : labels[trip.status];
 export function pointLabel(point: Point, zones: Zone[]) {
   return (
     zones.find(

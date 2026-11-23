@@ -26,7 +26,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   if (!response.ok)
     throw new ApiError(
       response.status === 401
-        ? 'Sign in with the server’s shared development login, then retry.'
+        ? 'Sign in to continue.'
         : data?.message ||
             (typeof data?.detail === 'string' ? data.detail : 'Please check the submitted values.'),
       response.status,

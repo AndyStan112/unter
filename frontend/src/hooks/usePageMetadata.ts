@@ -7,9 +7,9 @@ export function usePageMetadata() {
   const { pathname } = useLocation();
   useEffect(() => {
     const ride = pathname === '/ride' || pathname.startsWith('/ride/');
-    document.title = ride ? 'Unter · Ride & drive' : 'Unter · Control room';
+    document.title = ride ? 'Unter' : 'Unter · Control room';
     const color = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-    if (color) color.content = ride ? theme.palette.primary.main : theme.palette.secondary.main;
+    if (color) color.content = ride ? '#FFFFFF' : theme.palette.secondary.main;
     let manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (ride && !manifest) {
       manifest = document.createElement('link');

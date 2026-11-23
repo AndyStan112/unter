@@ -47,3 +47,10 @@ The driver screen displays mock earnings from core's transactional settlement le
 driver trip history are fetched by profile ID. Push preferences select one receiving profile per
 browser subscription; notification payloads contain only status text and an app route. The service
 worker never reads Basic Auth credentials or caches private API responses.
+
+The ride experience uses a full-viewport map with floating controls and a draggable action sheet.
+`RideChrome` shares the sheet height with the map so route framing leaves space for the controls.
+`RideSheet` owns expansion, `LocationPicker` handles explicit address search and map pin selection,
+and `RouteFields` displays the selected stops. History, earnings and notification settings live in
+secondary drawers. The page itself does not scroll; longer sheets and secondary panels scroll
+internally, with safe-area padding for installed phone apps.

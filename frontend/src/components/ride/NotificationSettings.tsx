@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Stack, Typography } from '@mui/material';
+import { Alert, Button, Stack } from '@mui/material';
 import { api, errorMessage } from '../../services/api';
 import { buildAsset } from '../../services/buildAsset';
 import { useRide } from '../../hooks/RideProvider';
@@ -37,7 +37,9 @@ export function NotificationSettings({ role }: { role: Role }) {
     setError('');
     try {
       if (!import.meta.env.PROD)
-        throw new Error('Push notifications require the built PWA on HTTPS or localhost.');
+        throw new Error(
+          'Notifications aren’t available here. Open the installed app to try again.',
+        );
       if (!enabled && (await Notification.requestPermission()) !== 'granted')
         throw new Error('Notifications are blocked. Enable them in your browser settings.');
       await navigator.serviceWorker.register(buildAsset('/ride/sw.js'), {
@@ -87,21 +89,9 @@ export function NotificationSettings({ role }: { role: Role }) {
         disabled={!supported || !online || busy}
         onClick={() => void toggle()}
       >
-        {busy
-          ? 'Updating notifications…'
-          : enabled
-            ? `Disable ${role} notifications`
-            : `Enable ${role} notifications`}
+        {busy ? 'Updating…' : enabled ? 'Turn off ride updates' : 'Enable ride updates'}
       </Button>
-      <Typography variant="caption" color="text.secondary">
-        Ride updates can arrive while the app is closed. On iPhone, install Unter first. This device
-        receives alerts for the profile you enable.
-      </Typography>
-      {!supported && (
-        <Alert severity="info">
-          Push notifications are unavailable in this browser. Keep Unter open for ride updates.
-        </Alert>
-      )}
+      {!supported && <Alert severity="info">Notifications aren’t available on this device.</Alert>}
       {error && <Alert severity="info">{error}</Alert>}
     </Stack>
   );

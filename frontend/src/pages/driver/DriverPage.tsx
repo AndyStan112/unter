@@ -1,120 +1,154 @@
-import { Box, Button, Card, CardContent, Stack, Typography } from '@mui/material';
-import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
-import { EarningsCard } from '../../components/ride/EarningsCard';
-import { TripHistory } from '../../components/ride/TripHistory';
-import { DriverPresence } from '../../components/ride/DriverPresence';
-import { NotificationSettings } from '../../components/ride/NotificationSettings';
+import { useState } from 'react';
+import { Box, Button, Stack, Typography } from '@mui/material';
+import EditLocationAltOutlined from '@mui/icons-material/EditLocationAltOutlined';
 import { useRide } from '../../hooks/RideProvider';
 import { isTerminal } from '../../services/rideState';
 import { RideMap } from '../../components/ride/RideMap';
-import { LocationField } from '../../components/ride/LocationField';
+import { RideSheet } from '../../components/ride/RideSheet';
+import { LocationPicker } from '../../components/ride/LocationPicker';
+import { locationName } from '../../components/ride/RouteFields';
 import { ProfileForm } from '../../components/ride/ProfileForm';
 import { TripCard } from '../../components/ride/TripCard';
-import { StatusChip } from '../../components/common/StatusChip';
+import { DriverPresence } from '../../components/ride/DriverPresence';
+import { useRideChrome } from '../../components/ride/RideChrome';
+import { money } from '../../components/ride/EarningsCard';
+import type { Point } from '../../types/ride';
 export default function DriverPage() {
   const {
     session,
-    earnings,
-    history,
     zones,
     trips,
     offer,
     driver,
     driverPoint,
+    earnings,
     busy,
     online,
-    gpsEnabled,
     setDriverPoint,
     enableGps,
     goOnline,
     goOffline,
   } = useRide();
+  const { openPanel } = useRideChrome();
+  const [editing, setEditing] = useState(false),
+    [picking, setPicking] = useState(false),
+    [draft, setDraft] = useState<Point | null>(null),
+    [dismissed, setDismissed] = useState<string | null>(null);
   const trip = offer?.trip || trips.driver,
     active = !!trip && !isTerminal(trip);
+  const showTrip = !!trip && (active || trip.id !== dismissed);
+  const position = driverPoint || driver?.position || zones[0] || null;
+  const available = driver && driver.status !== 'OFFLINE';
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: 'minmax(280px, 380px) minmax(0, 1fr)' },
-        gap: 3,
-        alignItems: 'start',
-      }}
-    >
-      <Stack spacing={3}>
-        {!session.profiles.driver ? (
+    <>
+      <RideMap
+        pickedUp={trip?.status === 'PICKED_UP'}
+        driver={position}
+        pickup={active ? trip.pickup : null}
+        dropoff={active ? trip.dropoff : null}
+        picking={picking}
+        pickPoint={draft}
+        onSelect={picking ? setDraft : undefined}
+        onLocate={enableGps}
+        extraControl={<DriverPresence />}
+      />
+      <RideSheet label="Driver controls">
+        {picking ? (
+          <Stack spacing={2}>
+            <Typography variant="h3" component="h1">
+              Set your location
+            </Typography>
+            <Typography color="text.secondary">Move the map to place your pin.</Typography>
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" onClick={() => setPicking(false)} sx={{ flex: 1 }}>
+                Back
+              </Button>
+              <Button
+                variant="contained"
+                sx={{ flex: 2 }}
+                disabled={!draft}
+                onClick={() => {
+                  if (draft) setDriverPoint({ ...draft, label: 'Pinned location' });
+                  setPicking(false);
+                }}
+              >
+                Confirm location
+              </Button>
+            </Stack>
+          </Stack>
+        ) : !session.profiles.driver ? (
           <ProfileForm role="driver" />
+        ) : showTrip ? (
+          <TripCard role="driver" onDone={() => setDismissed(trip.id)} />
         ) : (
-          <>
-            <Card>
-              <CardContent sx={{ p: 3 }}>
-                <Stack spacing={2.5}>
-                  <Stack direction="row" justifyContent="space-between" gap={1} flexWrap="wrap">
-                    <Typography variant="h3" component="h2">
-                      Ready, {session.profiles.driver.name}?
-                    </Typography>
-                    {driver && <StatusChip label={driver.status} />}
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    Choose your location, then go online to receive nearby ride requests.
-                  </Typography>
-                  <LocationField
-                    label="Your location"
-                    point={driverPoint || driver?.position || zones[0] || null}
-                    zones={zones}
-                    onChange={setDriverPoint}
-                    disabled={busy}
-                  />
-                  <Button startIcon={<MyLocationRounded />} onClick={enableGps} disabled={busy}>
-                    {gpsEnabled ? 'Live GPS enabled' : 'Use live GPS'}
-                  </Button>
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      variant="contained"
-                      disabled={busy || !online || !driver || driver.status !== 'OFFLINE'}
-                      onClick={() => void goOnline()}
-                    >
-                      Go online
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      disabled={
-                        busy || !online || !driver || ['OFFLINE', 'ON_TRIP'].includes(driver.status)
-                      }
-                      onClick={() => void goOffline()}
-                    >
-                      Go offline
-                    </Button>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    Keep the app open while online for location updates and incoming offers.
-                    Selecting a point stops live GPS.
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-            <TripCard role="driver" />
-            <DriverPresence />
-            <NotificationSettings role="driver" />
-            <EarningsCard earnings={earnings} />
-            <TripHistory trips={history.driver || []} zones={zones} />
-          </>
+          <Stack spacing={2}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Box
+                sx={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  bgcolor: available ? '#21854D' : '#9BA3A8',
+                }}
+              />
+              <Typography variant="h3" component="h1">
+                {available ? 'You’re online' : 'Ready to drive?'}
+              </Typography>
+            </Stack>
+            <Typography color="text.secondary">
+              {available ? 'Looking for nearby requests' : 'Go online to start receiving rides'}
+            </Typography>
+            <Button
+              color="inherit"
+              startIcon={<EditLocationAltOutlined />}
+              onClick={() => setEditing(true)}
+              disabled={busy}
+              sx={{ justifyContent: 'flex-start', bgcolor: '#F4F5F7', px: 2 }}
+            >
+              {locationName(position, zones, 'Set your location')}
+            </Button>
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={busy || !online || !driver || driver.status === 'ON_TRIP'}
+              onClick={() => void (available ? goOffline() : goOnline())}
+            >
+              {available ? 'Go offline' : 'Go online'}
+            </Button>
+            {earnings && (
+              <Button
+                color="inherit"
+                onClick={() => openPanel('earnings')}
+                sx={{ justifyContent: 'space-between', py: 0.5, minHeight: 36 }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Today’s earnings
+                </Typography>
+                <Typography fontWeight={700}>{money(earnings.today)}</Typography>
+              </Button>
+            )}
+          </Stack>
         )}
-      </Stack>
-      <Card>
-        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Your city, your next ride
-          </Typography>
-          <RideMap
-            pickedUp={trip?.status === 'PICKED_UP'}
-            driver={driverPoint || driver?.position}
-            pickup={active ? trip.pickup : null}
-            dropoff={active ? trip.dropoff : null}
-            onSelect={!busy ? setDriverPoint : undefined}
-            instruction="Tap the map to update your location, or enable live GPS."
-          />
-        </CardContent>
-      </Card>
-    </Box>
+      </RideSheet>
+      <LocationPicker
+        open={editing}
+        label="Your location"
+        zones={zones}
+        onClose={() => setEditing(false)}
+        onSelect={(point) => {
+          setDriverPoint(point);
+          setEditing(false);
+        }}
+        onLocate={() => {
+          enableGps();
+          setEditing(false);
+        }}
+        onMap={() => {
+          setDraft(position);
+          setPicking(true);
+          setEditing(false);
+        }}
+      />
+    </>
   );
 }
