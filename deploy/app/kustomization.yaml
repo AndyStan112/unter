@@ -16,7 +16,7 @@ resources:
 images:
 - name: unter-core
   newName: ghcr.io/andystan112/unter-core
-  newTag: f79299c3ce15819f7155d5c1a4580baa62a3aa56
+  newTag: a03fcb51a5b94a2398b512a3b9cac2e8453c1c83
 - name: unter-python
   newName: ghcr.io/andystan112/unter-python
-  newTag: f79299c3ce15819f7155d5c1a4580baa62a3aa56
+  newTag: a03fcb51a5b94a2398b512a3b9cac2e8453c1c83
